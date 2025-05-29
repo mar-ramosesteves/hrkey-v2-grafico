@@ -3,6 +3,17 @@ from flask import Flask, request, jsonify
 import requests
 import os
 import json
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+# Carrega credenciais da conta de serviço
+creds = service_account.Credentials.from_service_account_file(
+    "armazenamentopastasrh-2284e919a76c.json",
+    scopes=["https://www.googleapis.com/auth/drive"]
+)
+
+# Conecta ao Google Drive
+drive_service = build("drive", "v3", credentials=creds)
 
 app = Flask(__name__)
 
