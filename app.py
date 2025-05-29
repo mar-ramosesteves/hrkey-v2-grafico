@@ -84,3 +84,15 @@ def gerar_relatorio_json():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+from flask_cors import CORS
+
+CORS(app, resources={r"/*": {"origins": ["https://gestor.thehrkey.tech"]}}, supports_credentials=True)
+
+@app.after_request
+def aplicar_cors(response):
+    response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    return response
+
+
