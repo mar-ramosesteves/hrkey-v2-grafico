@@ -27,7 +27,7 @@ import os
 import json
 
 # 📁 Autentica com a conta de serviço
-SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-2284e919a76c.json'
+SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-1290b90ee29c.json'
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
 creds = service_account.Credentials.from_service_account_file(
@@ -84,7 +84,7 @@ def gerar_relatorio_json():
         import io
 
         # 🔐 Caminho da credencial da conta de serviço
-        SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-2284e919a76c.json'
+        SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-1290b90ee29c.json'
         SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
         # ✅ Autentica
