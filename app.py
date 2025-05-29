@@ -7,10 +7,11 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 # Carrega credenciais da conta de serviço
-creds = service_account.Credentials.from_service_account_file(
-    "armazenamentopastasrh-b349c1ac5aed.json",
+creds = service_account.Credentials.from_service_account_info(
+    json.loads(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")),
     scopes=["https://www.googleapis.com/auth/drive"]
 )
+
 
 
 
@@ -28,11 +29,11 @@ import os
 import json
 
 # 📁 Autentica com a conta de serviço
-SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-b349c1ac5aed.json'
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
-creds = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=SCOPES
+creds = service_account.Credentials.from_service_account_info(
+    json.loads(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")),
+    scopes=SCOPES
 )
 
 # 📂 ID da pasta raiz "Avaliacoes RH" no seu Google Drive
@@ -84,14 +85,21 @@ def gerar_relatorio_json():
         from googleapiclient.http import MediaIoBaseDownload
         import io
 
-        # 🔐 Caminho da credencial da conta de serviço
-        SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-b349c1ac5aed.json'
-        SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+        
 
-        # ✅ Autentica
-        creds = service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-        service = build('drive', 'v3', credentials=creds)
+
+
+SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+
+# ✅ Autentica com variável de ambiente segura
+creds = service_account.Credentials.from_service_account_info(
+    json.loads(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")),
+    scopes=SCOPES
+)
+service = build('drive', 'v3', credentials=creds)
+
+
+      
 
         # 📥 Dados recebidos
         dados = request.get_json()
