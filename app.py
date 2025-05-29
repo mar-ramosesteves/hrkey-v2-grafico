@@ -71,6 +71,46 @@ def buscar_jsons_google_drive(empresa, codrodada, email_lider):
 
     return dados_jsons
 
+@app.route("/gerar-relatorio-json", methods=["POST"])
+def gerar_relatorio_json():
+    try:
+        dados = request.get_json()
+        empresa = dados.get("empresa")
+        codrodada = dados.get("codrodada")
+        email_lider = dados.get("emailLider")
+
+        if not all([empresa, codrodada, email_lider]):
+            return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
+
+        jsons = buscar_jsons_google_drive(empresa, codrodada, email_lider)
+
+        auto = None
+        equipe = []
+
+        for nome_arquivo, conteudo in jsons:
+            tipo = conteudo.get("tipo", "").lower()
+            if tipo.startswith("auto"):
+                auto = conteudo
+            else:
+                equipe.append(conteudo)
+
+        if not auto and not equipe:
+            return jsonify({"erro": "Nenhum dado de avaliação encontrado."}), 404
+
+        resultado = {
+            "empresa": empresa,
+            "codrodada": codrodada,
+            "emailLider": email_lider,
+            "autoavaliacao": auto,
+            "avaliacoesEquipe": equipe,
+            "mensagem": "Relatório consolidado gerado com sucesso.",
+            "caminho": f"Avaliacoes RH / {empresa} / {codrodada} / {email_lider}"
+        }
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
 
 
 
