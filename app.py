@@ -1,19 +1,18 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import requests
 import os
 import json
+import io
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-import io
 from googleapiclient.http import MediaIoBaseDownload
-from flask_cors import CORS
 
-# 🔐 Autentica com a conta de serviço
-SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-b349c1ac5aed.json'
+# 🔐 Autentica com a conta de serviço via variável de ambiente segura
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
-
-creds = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=SCOPES
+creds = service_account.Credentials.from_service_account_info(
+    json.loads(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")),
+    scopes=SCOPES
 )
 service = build('drive', 'v3', credentials=creds)
 
@@ -99,4 +98,3 @@ def gerar_relatorio_json():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
-
