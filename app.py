@@ -34,3 +34,53 @@ def proxy_enviar_avaliacao_com_int():
 @app.route("/")
 def home():
     return "🔁 API V2 pronta para uso com conversão segura."
+
+
+@app.route("/gerar-relatorio-json", methods=["POST"])
+def gerar_relatorio_json():
+    try:
+        dados = request.get_json()
+        empresa = dados.get("empresa")
+        codrodada = dados.get("codrodada")
+        email_lider = dados.get("emailLider")
+
+        if not all([empresa, codrodada, email_lider]):
+            return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
+
+        pasta = f"Avaliacoes RH/{empresa}/{codrodada}/{email_lider}"
+
+        # Lista os arquivos .json da pasta
+        arquivos = os.listdir(pasta)
+        jsons = [arq for arq in arquivos if arq.endswith(".json")]
+
+        auto = None
+        equipe = []
+
+        for arq in jsons:
+            caminho = os.path.join(pasta, arq)
+            with open(caminho, "r", encoding="utf-8") as f:
+                conteudo = json.load(f)
+                if conteudo.get("tipo", "").lower().startswith("auto"):
+                    auto = conteudo
+                else:
+                    equipe.append(conteudo)
+
+        if not auto and not equipe:
+            return jsonify({"erro": "Nenhum dado de avaliação encontrado."}), 404
+
+        # Resultado básico de retorno
+        resultado = {
+            "empresa": empresa,
+            "codrodada": codrodada,
+            "emailLider": email_lider,
+            "autoavaliacao": auto,
+            "avaliacoesEquipe": equipe,
+            "mensagem": "Relatório consolidado gerado com sucesso.",
+            "caminho": pasta
+        }
+
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
