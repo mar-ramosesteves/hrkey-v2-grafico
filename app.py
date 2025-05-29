@@ -108,4 +108,26 @@ def aplicar_cors(response):
     response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     return response
 
+@app.route("/listar-pasta", methods=["GET"])
+def listar_pasta():
+    try:
+        # ID fixo da pasta "Avaliacoes RH"
+        pasta_id = "1l4kOZwed-Yc5nHU4RBTmWQz3zYAlpniS"
+
+        # Busca os arquivos/diretórios dentro da pasta
+        resultados = drive_service.files().list(
+            q=f"'{pasta_id}' in parents and trashed = false",
+            fields="files(name, id, mimeType)"
+        ).execute()
+
+        arquivos = resultados.get("files", [])
+
+        return jsonify({
+            "status": "ok",
+            "itens_encontrados": len(arquivos),
+            "conteudo": arquivos
+        })
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
 
