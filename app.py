@@ -8,9 +8,10 @@ from googleapiclient.discovery import build
 
 # Carrega credenciais da conta de serviço
 creds = service_account.Credentials.from_service_account_file(
-    "armazenamentopastasrh-1290b90ee29c.json",
+    "armazenamentopastasrh-b349c1ac5aed.json",
     scopes=["https://www.googleapis.com/auth/drive"]
 )
+
 
 
 # Conecta ao Google Drive
@@ -27,7 +28,7 @@ import os
 import json
 
 # 📁 Autentica com a conta de serviço
-SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-1290b90ee29c.json'
+SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-b349c1ac5aed.json'
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
 creds = service_account.Credentials.from_service_account_file(
@@ -84,7 +85,7 @@ def gerar_relatorio_json():
         import io
 
         # 🔐 Caminho da credencial da conta de serviço
-        SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-1290b90ee29c.json'
+        SERVICE_ACCOUNT_FILE = 'armazenamentopastasrh-b349c1ac5aed.json'
         SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
         # ✅ Autentica
