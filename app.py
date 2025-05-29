@@ -8,9 +8,10 @@ from googleapiclient.discovery import build
 
 # Carrega credenciais da conta de serviço
 creds = service_account.Credentials.from_service_account_file(
-    "armazenamentopastasrh-2284e919a76c.json",
+    "armazenamentopastasrh-1290b90ee29c.json",
     scopes=["https://www.googleapis.com/auth/drive"]
 )
+
 
 # Conecta ao Google Drive
 drive_service = build("drive", "v3", credentials=creds)
