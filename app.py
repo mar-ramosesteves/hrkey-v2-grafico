@@ -6,21 +6,22 @@ import json
 import io
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-
-
-
-
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload, MediaFileUpload
+from datetime import datetime
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+import tempfile
+import numpy as np
+import re
 
 # 🔐 Autentica com a conta de serviço via variável de ambiente segura
 SCOPES = ['https://www.googleapis.com/auth/drive']
-
 creds = service_account.Credentials.from_service_account_info(
     json.loads(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")),
     scopes=SCOPES
 )
 service = build('drive', 'v3', credentials=creds)
-# 🗂 ID fixo da pasta "Avaliacoes RH" no Drive
 PASTA_RAIZ = "1l4kOZwed-Yc5nHU4RBTmWQz3zYAlpniS"
 
 app = Flask(__name__)
@@ -39,10 +40,7 @@ def home():
 
 @app.route("/gerar-relatorio-json", methods=["POST"])
 def gerar_relatorio_json():
-    
-
-    
-
+    try:
         dados = request.get_json()
         empresa = dados.get("empresa")
         codrodada = dados.get("codrodada")
@@ -57,11 +55,7 @@ def gerar_relatorio_json():
             arquivos = resultados.get('files', [])
             return arquivos[0]['id'] if arquivos else None
 
-        raiz_id = "1l4kOZwed-Yc5nHU4RBTmWQz3zYAlpniS"
-        if not raiz_id:
-            return jsonify({"erro": "Pasta raiz 'Avaliacoes RH' não encontrada."}), 404
-
-        empresa_id = buscar_id_pasta(empresa, raiz_id)
+        empresa_id = buscar_id_pasta(empresa, PASTA_RAIZ)
         rodada_id = buscar_id_pasta(codrodada, empresa_id)
         lider_id = buscar_id_pasta(email_lider, rodada_id)
 
@@ -69,7 +63,6 @@ def gerar_relatorio_json():
             return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
 
         query = f"'{lider_id}' in parents and (mimeType = 'application/json' or mimeType = 'text/plain') and trashed = false"
-
         arquivos = service.files().list(q=query, fields="files(id, name)").execute().get('files', [])
 
         if not arquivos:
@@ -91,7 +84,6 @@ def gerar_relatorio_json():
             fh.seek(0)
             conteudo = json.load(fh)
             tipo = conteudo.get("tipo", "").lower()
-
             if tipo.startswith("auto"):
                 auto = conteudo
             else:
