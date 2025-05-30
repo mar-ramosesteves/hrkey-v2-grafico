@@ -355,4 +355,9 @@ def gerar_graficos_comparativos():
         return jsonify({"mensagem": f"PDFs salvos na pasta do líder com sucesso! ✅"})
 
     except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    response = jsonify({"erro": str(e)})
+    response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    return response, 500
+
