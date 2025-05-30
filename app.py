@@ -215,32 +215,37 @@ def gerar_graficos_comparativos():
         if not id_lider:
             return jsonify({"erro": "Pasta do líder não encontrada no Drive."}), 404
 
+        # 🔍 Procura pelo arquivo que começa com "relatorio_consolidado_{emailLider}" e termina com .json (ignorando maiúsculas)
         import re
         arquivos = service.files().list(
-            q=f"'{id_lider}' in parents and trashed = false",
+            q=f"'{id_lider}' in parents and mimeType = 'application/json' and trashed = false",
             fields="files(id, name, createdTime)").execute().get("files", [])
 
-        padrao = re.compile(rf"relatorio_consolidado_{re.escape(emailLider)}_.*\\.json", re.IGNORECASE)
+        padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}.*\\.json$", re.IGNORECASE)
         arquivos_filtrados = [f for f in arquivos if padrao.match(f["name"])]
 
         if not arquivos_filtrados:
             return jsonify({"erro": "Arquivo de relatório consolidado não encontrado no Drive."}), 404
 
-        # Ordena por data de criação (opcional)
-        arquivos_ordenados = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)
-        file_id = arquivos_ordenados[0]["id"]
+        # 📁 Usa o mais recente
+        arquivo_alvo = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)[0]
+        file_id = arquivo_alvo["id"]
 
+        # 🔽 Baixa conteúdo JSON
         fh = io.BytesIO()
         request_drive = service.files().get_media(fileId=file_id)
         downloader = MediaIoBaseDownload(fh, request_drive)
         done = False
-        while not done:
+        while done is False:
             status, done = downloader.next_chunk()
 
         json_str = fh.getvalue().decode("utf-8")
         json_data = json.loads(json_str)
 
-        return gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
+        # ✅ SEGUE LÓGICA DE GERAÇÃO DOS GRÁFICOS (já incluída antes)
+        gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
+
+        return jsonify({"mensagem": f"PDFs salvos na pasta do líder com sucesso! ✅"})
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
