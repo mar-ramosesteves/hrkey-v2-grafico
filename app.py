@@ -278,10 +278,6 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         media = MediaFileUpload(tmp.name, mimetype="application/pdf")
         service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
-
-
-
-
 @app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
 def gerar_graficos_comparativos():
     if request.method == "OPTIONS":
@@ -327,18 +323,15 @@ def gerar_graficos_comparativos():
             q=f"'{id_lider}' in parents and name contains '{prefixo}' and trashed = false and mimeType='application/json'",
             fields="files(id, name, createdTime)").execute().get("files", [])
 
-        # Filtra por regex ignorando maiúsculas/minúsculas
         padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}.*\.json$", re.IGNORECASE)
         arquivos_filtrados = [f for f in arquivos_json if padrao.match(f["name"])]
 
         if not arquivos_filtrados:
             return jsonify({"erro": "Arquivo de relatório consolidado não encontrado no Drive."}), 404
 
-        # 📁 Usa o mais recente
         arquivo_alvo = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)[0]
         file_id = arquivo_alvo["id"]
 
-        # 🔽 Baixa conteúdo JSON
         fh = io.BytesIO()
         request_drive = service.files().get_media(fileId=file_id)
         downloader = MediaIoBaseDownload(fh, request_drive)
@@ -355,9 +348,14 @@ def gerar_graficos_comparativos():
         return jsonify({"mensagem": f"PDFs salvos na pasta do líder com sucesso! ✅"})
 
     except Exception as e:
-    response = jsonify({"erro": str(e)})
-    response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
-    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
-    return response, 500
+        response = jsonify({"erro": str(e)})
+        response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        return response, 500
+
+
+
+
+
 
