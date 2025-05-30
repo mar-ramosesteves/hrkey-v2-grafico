@@ -9,7 +9,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
 # 🔐 Autentica com a conta de serviço via variável de ambiente segura
-SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+SCOPES = ['https://www.googleapis.com/auth/drive']
+
 creds = service_account.Credentials.from_service_account_info(
     json.loads(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")),
     scopes=SCOPES
