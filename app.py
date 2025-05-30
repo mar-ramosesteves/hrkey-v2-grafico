@@ -58,7 +58,8 @@ def gerar_relatorio_json():
         if not lider_id:
             return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
 
-        query = f"'{lider_id}' in parents and mimeType = 'application/json' and trashed = false"
+        query = f"'{lider_id}' in parents and (mimeType = 'application/json' or mimeType = 'text/plain') and trashed = false"
+
         arquivos = service.files().list(q=query, fields="files(id, name)").execute().get('files', [])
 
         if not arquivos:
