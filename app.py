@@ -197,16 +197,29 @@ def gerar_graficos_comparativos():
         if not all([empresa, codrodada, emailLider]):
             return jsonify({"erro": "Campos obrigatórios faltando"}), 400
 
-        # 📂 Caminho do arquivo JSON salvo
-        pasta_empresa = f"{PASTA_RAIZ}/{empresa}/{codrodada}/{emailLider}"
+        # Função para localizar a pasta por nome e ID do pai
+        def encontrar_pasta(nome, id_pai):
+            resultado = service.files().list(
+                q=f"'{id_pai}' in parents and name = '{nome}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+                fields="files(id)").execute()
+            arquivos = resultado.get("files", [])
+            return arquivos[0]["id"] if arquivos else None
+
+        # Localiza a pasta correta no Drive
+        id_empresa = encontrar_pasta(empresa, PASTA_RAIZ)
+        id_rodada = encontrar_pasta(codrodada, id_empresa)
+        id_lider = encontrar_pasta(emailLider, id_rodada)
+
+        if not id_lider:
+            return jsonify({"erro": "Pasta do líder não encontrada no Drive."}), 404
+
         nome_arquivo = f"{emailLider.lower()}_autoavaliacao.json"
 
         # 🔍 Baixa o arquivo de autoavaliação
-        results = (
-            service.files()
-            .list(q=f"'{pasta_empresa}' in parents and name = '{nome_arquivo}' and trashed = false",
-                  fields="files(id, name)").execute()
-        )
+        results = service.files().list(
+            q=f"'{id_lider}' in parents and name = '{nome_arquivo}' and trashed = false",
+            fields="files(id, name)").execute()
+
         files = results.get("files", [])
         if not files:
             return jsonify({"erro": "Arquivo de autoavaliação não encontrado no Drive."}), 404
@@ -227,6 +240,7 @@ def gerar_graficos_comparativos():
         import matplotlib.pyplot as plt
         from matplotlib.backends.backend_pdf import PdfPages
         import tempfile
+        import numpy as np
 
         matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
         perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
@@ -247,8 +261,6 @@ def gerar_graficos_comparativos():
             return {a: round((totais[a] / maximos[a]) * 100, 1) if maximos[a] > 0 else 0 for a in arquetipos}
 
         pct_auto = calcular_percentuais(json_data["autoavaliacao"])
-
-        import numpy as np
         respostas_equipes = json_data["avaliacoesEquipe"]
         media_equipe = {cod: round(np.mean([r.get(cod, 0) for r in respostas_equipes]), 2) for cod in perguntas}
         pct_equipe = calcular_percentuais(media_equipe)
@@ -296,12 +308,13 @@ def gerar_graficos_comparativos():
         nome_pdf = "relatorio_comparativo.pdf"
 
         # Apagar anterior, se existir
-        anteriores = service.files().list(q=f"'{pasta_empresa}' in parents and name = '{nome_pdf}' and trashed = false",
-                                          fields="files(id)").execute()
+        anteriores = service.files().list(
+            q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
+            fields="files(id)").execute()
         for arq in anteriores.get("files", []):
             service.files().delete(fileId=arq["id"]).execute()
 
-        file_metadata = {"name": nome_pdf, "parents": [pasta_empresa]}
+        file_metadata = {"name": nome_pdf, "parents": [id_lider]}
         media = MediaFileUpload(tmp.name, mimetype="application/pdf")
         service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
@@ -309,6 +322,8 @@ def gerar_graficos_comparativos():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
+
 
 
 
