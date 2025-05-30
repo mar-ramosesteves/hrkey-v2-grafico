@@ -99,3 +99,99 @@ def gerar_relatorio_json():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
+
+from datetime import datetime
+from googleapiclient.http import MediaIoBaseUpload
+
+@app.route("/salvar-json-consolidado", methods=["POST"])
+def salvar_json_consolidado():
+    try:
+        dados = request.get_json()
+        empresa = dados.get("empresa")
+        codrodada = dados.get("codrodada")
+        email_lider = dados.get("emailLider")
+
+        if not all([empresa, codrodada, email_lider]):
+            return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
+
+        # 🔍 Função para buscar ID de subpasta
+        def buscar_id_pasta(nome_pasta, id_pasta_mae):
+            query = f"'{id_pasta_mae}' in parents and name = '{nome_pasta}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            resultados = service.files().list(q=query, fields="files(id, name)").execute()
+            arquivos = resultados.get('files', [])
+            return arquivos[0]['id'] if arquivos else None
+
+        raiz_id = buscar_id_pasta("Avaliacoes RH", "root")
+        empresa_id = buscar_id_pasta(empresa, raiz_id)
+        rodada_id = buscar_id_pasta(codrodada, empresa_id)
+        lider_id = buscar_id_pasta(email_lider, rodada_id)
+
+        if not lider_id:
+            return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
+
+        # 📄 Busca os arquivos JSON da pasta do líder
+        query = f"'{lider_id}' in parents and mimeType = 'application/json' and trashed = false"
+        arquivos = service.files().list(q=query, fields="files(id, name)").execute().get('files', [])
+
+        auto = None
+        equipe = []
+
+        for arquivo in arquivos:
+            file_id = arquivo['id']
+            request_drive = service.files().get_media(fileId=file_id)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request_drive)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+
+            fh.seek(0)
+            conteudo = json.load(fh)
+            tipo = conteudo.get("tipo", "").lower()
+
+            if tipo.startswith("auto"):
+                auto = conteudo
+            else:
+                equipe.append(conteudo)
+
+        if not auto and not equipe:
+            return jsonify({"erro": "Nenhum dado de avaliação encontrado."}), 404
+
+        # 🧩 Monta o dicionário final
+        relatorio = {
+            "empresa": empresa,
+            "codrodada": codrodada,
+            "emailLider": email_lider,
+            "autoavaliacao": auto,
+            "avaliacoesEquipe": equipe,
+            "geradoEm": datetime.now().isoformat()
+        }
+
+        # 💾 Prepara o conteúdo e nome do arquivo
+        json_bytes = io.BytesIO(json.dumps(relatorio, indent=2).encode("utf-8"))
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+        nome_arquivo = f"relatorio_consolidado_{email_lider}_{timestamp}.json"
+
+        media = MediaIoBaseUpload(json_bytes, mimetype="application/json")
+        file_metadata = {
+            "name": nome_arquivo,
+            "parents": [lider_id],
+            "mimeType": "application/json"
+        }
+
+        novo_arquivo = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id"
+        ).execute()
+
+        return jsonify({
+            "mensagem": "✅ Relatório consolidado salvo no Drive com sucesso!",
+            "nome_arquivo": nome_arquivo,
+            "arquivo_id": novo_arquivo.get("id")
+        })
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
