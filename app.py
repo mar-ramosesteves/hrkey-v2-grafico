@@ -213,12 +213,24 @@ def gerar_graficos_comparativos():
         if not id_lider:
             return jsonify({"erro": "Pasta do líder não encontrada no Drive."}), 404
 
-        nome_arquivo = f"{emailLider.lower()}_autoavaliacao.json"
+        import re
 
-        # 🔍 Baixa o arquivo de autoavaliação
-        results = service.files().list(
-            q=f"'{id_lider}' in parents and name = '{nome_arquivo}' and trashed = false",
-            fields="files(id, name)").execute()
+# 🔍 Lista todos os arquivos da pasta do líder
+arquivos = service.files().list(
+    q=f"'{id_lider}' in parents and trashed = false",
+    fields="files(id, name)").execute().get("files", [])
+
+# 🔎 Procura o arquivo que termina com "_Autoavaliação"
+padrao = re.compile(rf"^{re.escape(emailLider)}_Autoavaliação$", re.IGNORECASE)
+arquivo_alvo = next((f for f in arquivos if padrao.match(f["name"])), None)
+
+if not arquivo_alvo:
+    return jsonify({"erro": "Arquivo de autoavaliação não encontrado no Drive."}), 404
+
+file_id = arquivo_alvo["id"]
+
+
+        
 
         files = results.get("files", [])
         if not files:
