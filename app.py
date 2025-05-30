@@ -104,6 +104,9 @@ def gerar_relatorio_json():
 from datetime import datetime
 from googleapiclient.http import MediaIoBaseUpload
 
+from datetime import datetime
+from googleapiclient.http import MediaIoBaseUpload
+
 @app.route("/salvar-json-consolidado", methods=["POST"])
 def salvar_json_consolidado():
     try:
@@ -115,6 +118,9 @@ def salvar_json_consolidado():
         if not all([empresa, codrodada, email_lider]):
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
+        # ✅ ID fixo da pasta raiz
+        raiz_id = "1l4kOZwed-Yc5nHU4RBTmWQz3zYAlpniS"
+
         # 🔍 Função para buscar ID de subpasta
         def buscar_id_pasta(nome_pasta, id_pasta_mae):
             query = f"'{id_pasta_mae}' in parents and name = '{nome_pasta}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
@@ -122,7 +128,6 @@ def salvar_json_consolidado():
             arquivos = resultados.get('files', [])
             return arquivos[0]['id'] if arquivos else None
 
-        raiz_id = buscar_id_pasta("Avaliacoes RH", "root")
         empresa_id = buscar_id_pasta(empresa, raiz_id)
         rodada_id = buscar_id_pasta(codrodada, empresa_id)
         lider_id = buscar_id_pasta(email_lider, rodada_id)
@@ -130,41 +135,13 @@ def salvar_json_consolidado():
         if not lider_id:
             return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
 
-        # 📄 Busca os arquivos JSON da pasta do líder
-        query = f"'{lider_id}' in parents and mimeType = 'application/json' and trashed = false"
-        arquivos = service.files().list(q=query, fields="files(id, name)").execute().get('files', [])
-
-        auto = None
-        equipe = []
-
-        for arquivo in arquivos:
-            file_id = arquivo['id']
-            request_drive = service.files().get_media(fileId=file_id)
-            fh = io.BytesIO()
-            downloader = MediaIoBaseDownload(fh, request_drive)
-            done = False
-            while not done:
-                status, done = downloader.next_chunk()
-
-            fh.seek(0)
-            conteudo = json.load(fh)
-            tipo = conteudo.get("tipo", "").lower()
-
-            if tipo.startswith("auto"):
-                auto = conteudo
-            else:
-                equipe.append(conteudo)
-
-        if not auto and not equipe:
-            return jsonify({"erro": "Nenhum dado de avaliação encontrado."}), 404
-
         # 🧩 Monta o dicionário final
         relatorio = {
             "empresa": empresa,
             "codrodada": codrodada,
             "emailLider": email_lider,
-            "autoavaliacao": auto,
-            "avaliacoesEquipe": equipe,
+            "autoavaliacao": dados.get("autoavaliacao"),
+            "avaliacoesEquipe": dados.get("avaliacoesEquipe"),
             "geradoEm": datetime.now().isoformat()
         }
 
@@ -194,4 +171,3 @@ def salvar_json_consolidado():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
-
