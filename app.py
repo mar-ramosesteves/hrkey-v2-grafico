@@ -212,6 +212,12 @@ def gerar_graficos_comparativos():
         id_rodada = encontrar_pasta(codrodada, id_empresa)
         id_lider = encontrar_pasta(emailLider, id_rodada)
 
+        print("🔍 Buscando pasta do líder com nome:", emailLider)
+        print("📁 ID da empresa:", id_empresa)
+        print("📁 ID da rodada:", id_rodada)
+        
+
+
         if not id_lider:
             return jsonify({"erro": "Pasta do líder não encontrada no Drive."}), 404
 
