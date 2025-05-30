@@ -215,20 +215,20 @@ def gerar_graficos_comparativos():
         print("🔍 Buscando pasta do líder com nome:", emailLider)
         print("📁 ID da empresa:", id_empresa)
         print("📁 ID da rodada:", id_rodada)
-        
-
 
         if not id_lider:
             return jsonify({"erro": "Pasta do líder não encontrada no Drive."}), 404
 
-        # 🔍 Procura pelo arquivo que começa com "relatorio_consolidado_{emailLider}" e termina com .json (ignorando maiúsculas)
+        # 🔍 Buscar o arquivo do relatório consolidado (prefixo + qualquer sufixo)
         import re
-        arquivos = service.files().list(
-            q=f"'{id_lider}' in parents and mimeType = 'application/json' and trashed = false",
+        prefixo = f"relatorio_consolidado_{emailLider}"
+        arquivos_json = service.files().list(
+            q=f"'{id_lider}' in parents and name contains '{prefixo}' and trashed = false and mimeType='application/json'",
             fields="files(id, name, createdTime)").execute().get("files", [])
 
-        padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}.*\\.json$", re.IGNORECASE)
-        arquivos_filtrados = [f for f in arquivos if padrao.match(f["name"])]
+        # Filtra por regex ignorando maiúsculas/minúsculas
+        padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}.*\.json$", re.IGNORECASE)
+        arquivos_filtrados = [f for f in arquivos_json if padrao.match(f["name"])]
 
         if not arquivos_filtrados:
             return jsonify({"erro": "Arquivo de relatório consolidado não encontrado no Drive."}), 404
@@ -242,13 +242,13 @@ def gerar_graficos_comparativos():
         request_drive = service.files().get_media(fileId=file_id)
         downloader = MediaIoBaseDownload(fh, request_drive)
         done = False
-        while done is False:
+        while not done:
             status, done = downloader.next_chunk()
 
         json_str = fh.getvalue().decode("utf-8")
         json_data = json.loads(json_str)
 
-        # ✅ SEGUE LÓGICA DE GERAÇÃO DOS GRÁFICOS (já incluída antes)
+        # ✅ Gera e salva os dois PDFs na pasta do líder
         gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
         return jsonify({"mensagem": f"PDFs salvos na pasta do líder com sucesso! ✅"})
