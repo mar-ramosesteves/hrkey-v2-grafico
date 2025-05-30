@@ -181,12 +181,7 @@ def salvar_json_consolidado():
         return jsonify({"erro": str(e)}), 500
 
 def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
-    def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
-    print("🎯 Entrou na função gerar_grafico_completo_com_titulo")
-    print("🔎 Empresa:", empresa)
-    print("🔎 CodRodada:", codrodada)
-    print("🔎 EmailLider:", emailLider)
-    print("🔎 Total de respostas da equipe:", len(json_data.get("avaliacoesEquipe", [])))
+    
 
     import pandas as pd
     import matplotlib.pyplot as plt
