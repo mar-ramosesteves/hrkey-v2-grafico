@@ -176,3 +176,137 @@ def salvar_json_consolidado():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
+@app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
+def gerar_graficos_comparativos():
+    if request.method == "OPTIONS":
+        response = jsonify({'status': 'CORS preflight OK'})
+        response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        return response
+
+    try:
+        dados = request.get_json()
+        empresa = dados.get("empresa")
+        codrodada = dados.get("codrodada")
+        emailLider = dados.get("emailLider")
+
+        if not all([empresa, codrodada, emailLider]):
+            return jsonify({"erro": "Campos obrigatórios faltando"}), 400
+
+        # 📂 Caminho do arquivo JSON salvo
+        pasta_empresa = f"{PASTA_RAIZ}/{empresa}/{codrodada}/{emailLider}"
+        nome_arquivo = f"{emailLider.lower()}_autoavaliacao.json"
+
+        # 🔍 Baixa o arquivo de autoavaliação
+        results = (
+            service.files()
+            .list(q=f"'{pasta_empresa}' in parents and name = '{nome_arquivo}' and trashed = false",
+                  fields="files(id, name)").execute()
+        )
+        files = results.get("files", [])
+        if not files:
+            return jsonify({"erro": "Arquivo de autoavaliação não encontrado no Drive."}), 404
+
+        file_id = files[0]["id"]
+        fh = io.BytesIO()
+        request_drive = service.files().get_media(fileId=file_id)
+        downloader = MediaIoBaseDownload(fh, request_drive)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+
+        json_str = fh.getvalue().decode("utf-8")
+        json_data = json.loads(json_str)
+
+        # 🧠 Carrega matriz e calcula gráficos
+        import pandas as pd
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_pdf import PdfPages
+        import tempfile
+
+        matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+        perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
+        arquetipos = matriz["ARQUETIPO"].unique()
+
+        def calcular_percentuais(respostas):
+            totais = {a: 0 for a in arquetipos}
+            maximos = {a: 0 for a in arquetipos}
+            for cod in perguntas:
+                valor = respostas.get(cod, 0)
+                filtro = matriz[matriz["CHAVE"] == cod]
+                for _, linha in filtro.iterrows():
+                    arq = linha["ARQUETIPO"]
+                    peso = linha["PESO"]
+                    max_p = linha["MAX"]
+                    totais[arq] += valor * peso
+                    maximos[arq] += max_p * peso
+            return {a: round((totais[a] / maximos[a]) * 100, 1) if maximos[a] > 0 else 0 for a in arquetipos}
+
+        pct_auto = calcular_percentuais(json_data["autoavaliacao"])
+
+        import numpy as np
+        respostas_equipes = json_data["avaliacoesEquipe"]
+        media_equipe = {cod: round(np.mean([r.get(cod, 0) for r in respostas_equipes]), 2) for cod in perguntas}
+        pct_equipe = calcular_percentuais(media_equipe)
+
+        # 🎨 Criação dos gráficos
+        def plot_grafico_comparativo(pct_auto, pct_equipe):
+            fig, ax = plt.subplots(figsize=(10, 5))
+            arqs = list(pct_auto.keys())
+            x = np.arange(len(arqs))
+            ax.bar(x - 0.2, [pct_auto[a] for a in arqs], width=0.4, label="Auto")
+            ax.bar(x + 0.2, [pct_equipe[a] for a in arqs], width=0.4, label="Equipe")
+            ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
+            ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
+            ax.set_xticks(x)
+            ax.set_xticklabels(arqs)
+            ax.set_ylim(0, 100)
+            ax.set_ylabel("%")
+            ax.set_title("Comparativo por Arquétipo")
+            ax.legend()
+            return fig
+
+        def plot_grafico_velocimetro(cod, pct, titulo):
+            fig, ax = plt.subplots(figsize=(8, 0.5))
+            ax.barh(0, pct, color='royalblue', height=0.125)
+            ax.set_xlim(0, 100)
+            ax.set_yticks([])
+            ax.set_xticks(np.arange(0, 110, 10))
+            ax.set_title(f"{titulo} - {cod} ({pct}%)", fontsize=10)
+            return fig
+
+        # 📄 Criar PDF
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            with PdfPages(tmp.name) as pdf:
+                pdf.savefig(plot_grafico_comparativo(pct_auto, pct_equipe))
+                for cod in perguntas:
+                    fig1 = plot_grafico_velocimetro(cod, round((json_data["autoavaliacao"].get(cod, 0)/6)*100, 1), "Auto")
+                    fig2 = plot_grafico_velocimetro(cod, round((media_equipe.get(cod, 0)/6)*100, 1), "Equipe")
+                    pdf.savefig(fig1)
+                    pdf.savefig(fig2)
+                    plt.close(fig1)
+                    plt.close(fig2)
+
+        # ☁️ Salvar no Drive
+        from googleapiclient.http import MediaFileUpload
+        nome_pdf = "relatorio_comparativo.pdf"
+
+        # Apagar anterior, se existir
+        anteriores = service.files().list(q=f"'{pasta_empresa}' in parents and name = '{nome_pdf}' and trashed = false",
+                                          fields="files(id)").execute()
+        for arq in anteriores.get("files", []):
+            service.files().delete(fileId=arq["id"]).execute()
+
+        file_metadata = {"name": nome_pdf, "parents": [pasta_empresa]}
+        media = MediaFileUpload(tmp.name, mimetype="application/pdf")
+        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+
+        return jsonify({"mensagem": f"PDF salvo em: {empresa} / {codrodada} / {emailLider} ✅"})
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
+
