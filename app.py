@@ -181,6 +181,13 @@ def salvar_json_consolidado():
         return jsonify({"erro": str(e)}), 500
 
 def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
+    def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
+    print("🎯 Entrou na função gerar_grafico_completo_com_titulo")
+    print("🔎 Empresa:", empresa)
+    print("🔎 CodRodada:", codrodada)
+    print("🔎 EmailLider:", emailLider)
+    print("🔎 Total de respostas da equipe:", len(json_data.get("avaliacoesEquipe", [])))
+
     import pandas as pd
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
@@ -264,7 +271,8 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         with PdfPages(tmp.name) as pdf:
             pdf.savefig(plot_grafico_comparativo())
         from googleapiclient.http import MediaFileUpload
-        nome_pdf = "ARQUETIPOS_AUTO_VS_EQUIPE.pdf"
+        nome_pdf = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
+
 
         def encontrar_pasta(nome, id_pai):
             resultado = service.files().list(
