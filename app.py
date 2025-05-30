@@ -195,7 +195,9 @@ def gerar_graficos_comparativos():
         emailLider = dados.get("emailLider")
 
         if not all([empresa, codrodada, emailLider]):
-            return jsonify({"erro": "Campos obrigatórios faltando"}), 400
+            response = jsonify({"erro": "Campos obrigatórios faltando"})
+            response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+            return response, 400
 
         # Função para localizar a pasta por nome e ID do pai
         def encontrar_pasta(nome, id_pai):
@@ -211,37 +213,30 @@ def gerar_graficos_comparativos():
         id_lider = encontrar_pasta(emailLider, id_rodada)
 
         if not id_lider:
-            return jsonify({"erro": "Pasta do líder não encontrada no Drive."}), 404
+            response = jsonify({"erro": "Pasta do líder não encontrada no Drive."})
+            response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+            return response, 404
 
+        # 🔍 Buscar o arquivo com qualquer caixa de letra
         import re
+        arquivos = service.files().list(
+            q=f"'{id_lider}' in parents and trashed = false",
+            fields="files(id, name)").execute().get("files", [])
 
-# 🔍 Lista todos os arquivos da pasta do líder
-arquivos = service.files().list(
-    q=f"'{id_lider}' in parents and trashed = false",
-    fields="files(id, name)").execute().get("files", [])
+        padrao = re.compile(rf"^{re.escape(emailLider)}_Autoavaliação$", re.IGNORECASE)
+        arquivo_alvo = next((f for f in arquivos if padrao.match(f["name"])), None)
 
-# 🔎 Procura o arquivo que termina com "_Autoavaliação"
-padrao = re.compile(rf"^{re.escape(emailLider)}_Autoavaliação$", re.IGNORECASE)
-arquivo_alvo = next((f for f in arquivos if padrao.match(f["name"])), None)
+        if not arquivo_alvo:
+            response = jsonify({"erro": "Arquivo de autoavaliação não encontrado no Drive."})
+            response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+            return response, 404
 
-if not arquivo_alvo:
-    return jsonify({"erro": "Arquivo de autoavaliação não encontrado no Drive."}), 404
-
-file_id = arquivo_alvo["id"]
-
-
-        
-
-        files = results.get("files", [])
-        if not files:
-            return jsonify({"erro": "Arquivo de autoavaliação não encontrado no Drive."}), 404
-
-        file_id = files[0]["id"]
+        file_id = arquivo_alvo["id"]
         fh = io.BytesIO()
         request_drive = service.files().get_media(fileId=file_id)
         downloader = MediaIoBaseDownload(fh, request_drive)
         done = False
-        while done is False:
+        while not done:
             status, done = downloader.next_chunk()
 
         json_str = fh.getvalue().decode("utf-8")
@@ -319,7 +314,6 @@ file_id = arquivo_alvo["id"]
         from googleapiclient.http import MediaFileUpload
         nome_pdf = "relatorio_comparativo.pdf"
 
-        # Apagar anterior, se existir
         anteriores = service.files().list(
             q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
             fields="files(id)").execute()
@@ -330,12 +324,13 @@ file_id = arquivo_alvo["id"]
         media = MediaFileUpload(tmp.name, mimetype="application/pdf")
         service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
-        return jsonify({"mensagem": f"PDF salvo em: {empresa} / {codrodada} / {emailLider} ✅"})
+        resposta = jsonify({"mensagem": f"PDF salvo em: {empresa} / {codrodada} / {emailLider} ✅"})
+        resposta.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+        return resposta
 
     except Exception as e:
-        return jsonify({"erro": str(e)}), 500
-
-
-
+        resposta = jsonify({"erro": str(e)})
+        resposta.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+        return resposta, 500
 
 
