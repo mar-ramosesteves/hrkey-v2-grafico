@@ -39,9 +39,7 @@ def home():
 
 @app.route("/gerar-relatorio-json", methods=["POST"])
 def gerar_relatorio_json():
-    try:
-        print("📥 Iniciando processamento da rota /gerar-graficos-comparativos")
-        ...
+    
 
     
 
