@@ -285,6 +285,8 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 @app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
 def gerar_graficos_comparativos():
     if request.method == "OPTIONS":
+        print("🔥 Recebido preflight OPTIONS")
+
         response = jsonify({'status': 'CORS preflight OK'})
         response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
