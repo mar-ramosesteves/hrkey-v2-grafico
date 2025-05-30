@@ -40,7 +40,7 @@ def home():
 @app.route("/gerar-relatorio-json", methods=["POST"])
 def gerar_relatorio_json():
     try:
-    print("📥 Iniciando processamento da rota /gerar-graficos-comparativos")    
+print("📥 Iniciando processamento da rota /gerar-graficos-comparativos")    
 
         dados = request.get_json()
         empresa = dados.get("empresa")
