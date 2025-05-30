@@ -111,16 +111,19 @@ from googleapiclient.http import MediaIoBaseUpload
 @app.route("/salvar-json-consolidado", methods=["POST"])
 def salvar_json_consolidado():
     try:
+        from datetime import datetime
+        import io
+        from googleapiclient.http import MediaIoBaseUpload
+
         dados = request.get_json()
         empresa = dados.get("empresa")
         codrodada = dados.get("codrodada")
         email_lider = dados.get("emailLider")
+        auto = dados.get("autoavaliacao")
+        equipe = dados.get("avaliacoesEquipe")
 
-        if not all([empresa, codrodada, email_lider]):
-            return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
-
-        # ✅ ID fixo da pasta raiz
-        raiz_id = "1l4kOZwed-Yc5nHU4RBTmWQz3zYAlpniS"
+        if not all([empresa, codrodada, email_lider, auto, equipe]):
+            return jsonify({"erro": "Dados insuficientes para salvar o relatório."}), 400
 
         # 🔍 Função para buscar ID de subpasta
         def buscar_id_pasta(nome_pasta, id_pasta_mae):
@@ -129,6 +132,7 @@ def salvar_json_consolidado():
             arquivos = resultados.get('files', [])
             return arquivos[0]['id'] if arquivos else None
 
+        raiz_id = buscar_id_pasta("Avaliacoes RH", "root")
         empresa_id = buscar_id_pasta(empresa, raiz_id)
         rodada_id = buscar_id_pasta(codrodada, empresa_id)
         lider_id = buscar_id_pasta(email_lider, rodada_id)
@@ -136,13 +140,13 @@ def salvar_json_consolidado():
         if not lider_id:
             return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
 
-        # 🧩 Monta o dicionário final
+        # 🧩 Monta o dicionário final com os dados já recebidos
         relatorio = {
             "empresa": empresa,
             "codrodada": codrodada,
             "emailLider": email_lider,
-            "autoavaliacao": dados.get("autoavaliacao"),
-            "avaliacoesEquipe": dados.get("avaliacoesEquipe"),
+            "autoavaliacao": auto,
+            "avaliacoesEquipe": equipe,
             "geradoEm": datetime.now().isoformat()
         }
 
