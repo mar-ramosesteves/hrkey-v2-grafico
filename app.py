@@ -188,18 +188,26 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     import numpy as np
     import re
 
+    print("📊 Iniciando geração dos gráficos com título...")
+    
+    # 🔍 Carrega a matriz com chave
     matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+    print("📂 Matriz carregada com sucesso:", matriz.shape)
+
     perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
     arquetipos = matriz["ARQUETIPO"].unique()
+    print("📚 Arquétipos únicos encontrados:", arquetipos)
 
-    # Calcular média por questão da equipe
+    # 🧮 Calcular média por questão da equipe
     respostas_equipes = json_data.get("avaliacoesEquipe", [])
-    media_equipes = {
-        cod: round(np.mean([resp.get(cod, 0) for resp in respostas_equipes]), 1)
-        for cod in perguntas
-    }
+    media_equipes = {}
+    for cod in perguntas:
+        valores = [resp.get(cod, 0) for resp in respostas_equipes if cod in resp]
+        media = round(np.mean(valores), 1) if valores else 0
+        media_equipes[cod] = media
+    print("📈 Médias da equipe por questão:", media_equipes)
 
-    # Função para calcular percentuais cruzando com a matriz por chave
+    # 🧠 Função para calcular percentuais com base na matriz
     def calcular_percentuais(tipo, respostas):
         total_por_arquetipo = {a: 0 for a in arquetipos}
         max_por_arquetipo = {a: 0 for a in arquetipos}
@@ -215,15 +223,21 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
                     total_por_arquetipo[arq] += pontos
                     max_por_arquetipo[arq] += maximo
 
+        print(f"🔢 Totais para {tipo}:")
+        print("🎯 Pontos:", total_por_arquetipo)
+        print("🧭 Máximos:", max_por_arquetipo)
+
         return {
             a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
             for a in arquetipos
         }
 
-    pct_auto = calcular_percentuais("autoavaliacao", json_data["autoavaliacao"])
+    pct_auto = calcular_percentuais("autoavaliacao", json_data.get("autoavaliacao", {}))
     pct_equipes = calcular_percentuais("mediaEquipe", media_equipes)
+    print("✅ Percentuais Auto:", pct_auto)
+    print("✅ Percentuais Equipe:", pct_equipes)
 
-    # Gráfico de barras principal
+    # 🖼️ Gera gráfico
     def plot_grafico_comparativo():
         fig, ax = plt.subplots(figsize=(10, 6))
         x = np.arange(len(arquetipos))
@@ -246,14 +260,12 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         fig.tight_layout()
         return fig
 
-    # PDF principal
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         with PdfPages(tmp.name) as pdf:
             pdf.savefig(plot_grafico_comparativo())
         from googleapiclient.http import MediaFileUpload
         nome_pdf = "ARQUETIPOS_AUTO_VS_EQUIPE.pdf"
 
-        # Salvar no Drive (na pasta do líder)
         def encontrar_pasta(nome, id_pai):
             resultado = service.files().list(
                 q=f"'{id_pai}' in parents and name = '{nome}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
