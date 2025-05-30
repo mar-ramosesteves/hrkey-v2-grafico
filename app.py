@@ -16,6 +16,8 @@ creds = service_account.Credentials.from_service_account_info(
     scopes=SCOPES
 )
 service = build('drive', 'v3', credentials=creds)
+# 🗂 ID fixo da pasta "Avaliacoes RH" no Drive
+PASTA_RAIZ = "1l4kOZwed-Yc5nHU4RBTmWQz3zYAlpniS"
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": ["https://gestor.thehrkey.tech"]}}, supports_credentials=True)
