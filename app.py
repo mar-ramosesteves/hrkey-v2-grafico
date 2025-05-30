@@ -223,8 +223,9 @@ def gerar_graficos_comparativos():
             q=f"'{id_lider}' in parents and trashed = false",
             fields="files(id, name)").execute().get("files", [])
 
-        padrao = re.compile(rf"^{re.escape(emailLider)}_Autoavaliação$", re.IGNORECASE)
-        arquivo_alvo = next((f for f in arquivos if padrao.match(f["name"])), None)
+        padrao = re.compile(rf"^{re.escape(emailLider.strip())}_Autoavaliação$", re.IGNORECASE)
+arquivo_alvo = next((f for f in arquivos if padrao.match(f["name"].strip())), None)
+
 
         if not arquivo_alvo:
             response = jsonify({"erro": "Arquivo de autoavaliação não encontrado no Drive."})
