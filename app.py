@@ -199,11 +199,8 @@ def gerar_graficos_comparativos():
         emailLider = dados.get("emailLider")
 
         if not all([empresa, codrodada, emailLider]):
-            response = jsonify({"erro": "Campos obrigatórios faltando"})
-            response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
-            return response, 400
+            return jsonify({"erro": "Campos obrigatórios faltando"}), 400
 
-        # Função para localizar a pasta por nome e ID do pai
         def encontrar_pasta(nome, id_pai):
             resultado = service.files().list(
                 q=f"'{id_pai}' in parents and name = '{nome}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
@@ -211,30 +208,23 @@ def gerar_graficos_comparativos():
             arquivos = resultado.get("files", [])
             return arquivos[0]["id"] if arquivos else None
 
-        # Localiza a pasta correta no Drive
         id_empresa = encontrar_pasta(empresa, PASTA_RAIZ)
         id_rodada = encontrar_pasta(codrodada, id_empresa)
         id_lider = encontrar_pasta(emailLider, id_rodada)
 
         if not id_lider:
-            response = jsonify({"erro": "Pasta do líder não encontrada no Drive."})
-            response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
-            return response, 404
+            return jsonify({"erro": "Pasta do líder não encontrada no Drive."}), 404
 
-        # 🔍 Buscar o arquivo com qualquer caixa de letra
-        import re
         arquivos = service.files().list(
             q=f"'{id_lider}' in parents and trashed = false",
             fields="files(id, name)").execute().get("files", [])
 
-        padrao = re.compile(rf"^{re.escape(emailLider.strip())}_Autoavaliação$", re.IGNORECASE)
-arquivo_alvo = next((f for f in arquivos if padrao.match(f["name"].strip())), None)
-
+        import re
+        padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}_.*\\.json$", re.IGNORECASE)
+        arquivo_alvo = next((f for f in arquivos if padrao.match(f["name"])), None)
 
         if not arquivo_alvo:
-            response = jsonify({"erro": "Arquivo de autoavaliação não encontrado no Drive."})
-            response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
-            return response, 404
+            return jsonify({"erro": "Arquivo de relatório consolidado não encontrado no Drive."}), 404
 
         file_id = arquivo_alvo["id"]
         fh = io.BytesIO()
@@ -247,131 +237,36 @@ arquivo_alvo = next((f for f in arquivos if padrao.match(f["name"].strip())), No
         json_str = fh.getvalue().decode("utf-8")
         json_data = json.loads(json_str)
 
-        # 🧠 Carrega matriz e calcula gráficos
-        import pandas as pd
-        import matplotlib.pyplot as plt
-        from matplotlib.backends.backend_pdf import PdfPages
-        import tempfile
-        import numpy as np
+        from datetime import datetime
+        from utils.gerar_grafico_titulo import gerar_grafico_completo_com_titulo
 
-def gerar_grafico_completo_com_titulo(pct_auto, pct_eq, email_lider, data_envio, qtd_respostas_eq):
-    fig, ax = plt.subplots(figsize=(10, 6))
-    arqs = list(pct_auto.keys())
-    x = np.arange(len(arqs))
-    largura = 0.35
+        try:
+            data_envio = datetime.today().strftime("%Y-%m-%d")
+            grafico_path = gerar_grafico_completo_com_titulo(
+                pct_auto=json_data["pct_auto"],
+                pct_eq=json_data["pct_equipe"],
+                email_lider=emailLider,
+                data_envio=data_envio,
+                qtd_respostas_eq=len(json_data["avaliacoesEquipe"])
+            )
 
-    barras_auto = ax.bar(x - largura/2, [pct_auto[a] for a in arqs], width=largura, label="Autoavaliação", color="royalblue")
-    barras_eq = ax.bar(x + largura/2, [pct_eq[a] for a in arqs], width=largura, label=f"Média da Equipe (n={qtd_respostas_eq})", color="orange")
+            nome_pdf = "ARQUETIPOS_AUTO_VS_EQUIPE.pdf"
 
-    ax.axhline(60, color='gray', linestyle='--', linewidth=1, label="Dominante (60%)")
-    ax.axhline(50, color='gray', linestyle=':', linewidth=1, label="Suporte (50%)")
+            anteriores = service.files().list(
+                q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
+                fields="files(id)").execute()
+            for arq in anteriores.get("files", []):
+                service.files().delete(fileId=arq["id"]).execute()
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(arqs, fontsize=10)
-    ax.set_ylim(0, 100)
-    ax.set_yticks(np.arange(0, 110, 10))
-    ax.set_ylabel("%", fontsize=12)
+            from googleapiclient.http import MediaFileUpload
+            file_metadata = {"name": nome_pdf, "parents": [id_lider]}
+            media = MediaFileUpload(grafico_path, mimetype="application/pdf")
+            service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
-    for barra in barras_auto + barras_eq:
-        altura = barra.get_height()
-        ax.annotate(f"{altura:.1f}%", xy=(barra.get_x() + barra.get_width()/2, altura),
-                    xytext=(0, 3), textcoords="offset points",
-                    ha='center', va='bottom', fontsize=8)
+        except Exception as e:
+            return jsonify({"erro": f"Erro ao gerar gráfico principal: {str(e)}"}), 500
 
-    ax.set_title("ARQUÉTIPOS DE GESTÃO", fontsize=16, fontweight='bold')
-    ax.text(0.5, 1.03, f"Líder: {email_lider}  |  Data: {data_envio}",
-            ha='center', va='bottom', transform=ax.transAxes, fontsize=10)
-
-    ax.legend()
-    fig.tight_layout()
-    return fig
-
-
-
-
-
-        matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
-        perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
-        arquetipos = matriz["ARQUETIPO"].unique()
-
-        def calcular_percentuais(respostas):
-            totais = {a: 0 for a in arquetipos}
-            maximos = {a: 0 for a in arquetipos}
-            for cod in perguntas:
-                valor = respostas.get(cod, 0)
-                filtro = matriz[matriz["CHAVE"] == cod]
-                for _, linha in filtro.iterrows():
-                    arq = linha["ARQUETIPO"]
-                    peso = linha["PESO"]
-                    max_p = linha["MAX"]
-                    totais[arq] += valor * peso
-                    maximos[arq] += max_p * peso
-            return {a: round((totais[a] / maximos[a]) * 100, 1) if maximos[a] > 0 else 0 for a in arquetipos}
-
-        pct_auto = calcular_percentuais(json_data["autoavaliacao"])
-        respostas_equipes = json_data["avaliacoesEquipe"]
-        media_equipe = {cod: round(np.mean([r.get(cod, 0) for r in respostas_equipes]), 2) for cod in perguntas}
-        pct_equipe = calcular_percentuais(media_equipe)
-
-        # 🎨 Criação dos gráficos
-        def plot_grafico_comparativo(pct_auto, pct_equipe):
-            fig, ax = plt.subplots(figsize=(10, 5))
-            arqs = list(pct_auto.keys())
-            x = np.arange(len(arqs))
-            ax.bar(x - 0.2, [pct_auto[a] for a in arqs], width=0.4, label="Auto")
-            ax.bar(x + 0.2, [pct_equipe[a] for a in arqs], width=0.4, label="Equipe")
-            ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
-            ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
-            ax.set_xticks(x)
-            ax.set_xticklabels(arqs)
-            ax.set_ylim(0, 100)
-            ax.set_ylabel("%")
-            ax.set_title("Comparativo por Arquétipo")
-            ax.legend()
-            return fig
-
-        def plot_grafico_velocimetro(cod, pct, titulo):
-            fig, ax = plt.subplots(figsize=(8, 0.5))
-            ax.barh(0, pct, color='royalblue', height=0.125)
-            ax.set_xlim(0, 100)
-            ax.set_yticks([])
-            ax.set_xticks(np.arange(0, 110, 10))
-            ax.set_title(f"{titulo} - {cod} ({pct}%)", fontsize=10)
-            return fig
-
-        # 📄 Criar PDF
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            with PdfPages(tmp.name) as pdf:
-                pdf.savefig(plot_grafico_comparativo(pct_auto, pct_equipe))
-                for cod in perguntas:
-                    fig1 = plot_grafico_velocimetro(cod, round((json_data["autoavaliacao"].get(cod, 0)/6)*100, 1), "Auto")
-                    fig2 = plot_grafico_velocimetro(cod, round((media_equipe.get(cod, 0)/6)*100, 1), "Equipe")
-                    pdf.savefig(fig1)
-                    pdf.savefig(fig2)
-                    plt.close(fig1)
-                    plt.close(fig2)
-
-        # ☁️ Salvar no Drive
-        from googleapiclient.http import MediaFileUpload
-        nome_pdf = "relatorio_comparativo.pdf"
-
-        anteriores = service.files().list(
-            q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
-            fields="files(id)").execute()
-        for arq in anteriores.get("files", []):
-            service.files().delete(fileId=arq["id"]).execute()
-
-        file_metadata = {"name": nome_pdf, "parents": [id_lider]}
-        media = MediaFileUpload(tmp.name, mimetype="application/pdf")
-        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-
-        resposta = jsonify({"mensagem": f"PDF salvo em: {empresa} / {codrodada} / {emailLider} ✅"})
-        resposta.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
-        return resposta
+        return jsonify({"mensagem": f"PDF salvo em: {empresa} / {codrodada} / {emailLider} ✅"})
 
     except Exception as e:
-        resposta = jsonify({"erro": str(e)})
-        resposta.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
-        return resposta, 500
-
-
+        return jsonify({"erro": str(e)}), 500
