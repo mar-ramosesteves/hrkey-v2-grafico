@@ -8,6 +8,10 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
+
+
+
+
 # 🔐 Autentica com a conta de serviço via variável de ambiente segura
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
@@ -249,6 +253,42 @@ arquivo_alvo = next((f for f in arquivos if padrao.match(f["name"].strip())), No
         from matplotlib.backends.backend_pdf import PdfPages
         import tempfile
         import numpy as np
+
+def gerar_grafico_completo_com_titulo(pct_auto, pct_eq, email_lider, data_envio, qtd_respostas_eq):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    arqs = list(pct_auto.keys())
+    x = np.arange(len(arqs))
+    largura = 0.35
+
+    barras_auto = ax.bar(x - largura/2, [pct_auto[a] for a in arqs], width=largura, label="Autoavaliação", color="royalblue")
+    barras_eq = ax.bar(x + largura/2, [pct_eq[a] for a in arqs], width=largura, label=f"Média da Equipe (n={qtd_respostas_eq})", color="orange")
+
+    ax.axhline(60, color='gray', linestyle='--', linewidth=1, label="Dominante (60%)")
+    ax.axhline(50, color='gray', linestyle=':', linewidth=1, label="Suporte (50%)")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(arqs, fontsize=10)
+    ax.set_ylim(0, 100)
+    ax.set_yticks(np.arange(0, 110, 10))
+    ax.set_ylabel("%", fontsize=12)
+
+    for barra in barras_auto + barras_eq:
+        altura = barra.get_height()
+        ax.annotate(f"{altura:.1f}%", xy=(barra.get_x() + barra.get_width()/2, altura),
+                    xytext=(0, 3), textcoords="offset points",
+                    ha='center', va='bottom', fontsize=8)
+
+    ax.set_title("ARQUÉTIPOS DE GESTÃO", fontsize=16, fontweight='bold')
+    ax.text(0.5, 1.03, f"Líder: {email_lider}  |  Data: {data_envio}",
+            ha='center', va='bottom', transform=ax.transAxes, fontsize=10)
+
+    ax.legend()
+    fig.tight_layout()
+    return fig
+
+
+
+
 
         matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
         perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
