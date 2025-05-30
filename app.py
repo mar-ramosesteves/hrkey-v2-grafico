@@ -193,12 +193,6 @@ def gerar_graficos_comparativos():
         return response
 
     try:
-        import re, io, json, tempfile, numpy as np
-        import pandas as pd
-        import matplotlib.pyplot as plt
-        from matplotlib.backends.backend_pdf import PdfPages
-        from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
-
         dados = request.get_json()
         empresa = dados.get("empresa")
         codrodada = dados.get("codrodada")
@@ -221,19 +215,21 @@ def gerar_graficos_comparativos():
         if not id_lider:
             return jsonify({"erro": "Pasta do líder não encontrada no Drive."}), 404
 
-        # 🔍 Lista todos os arquivos da pasta e localiza o JSON consolidado mais recente
+        import re
         arquivos = service.files().list(
-            q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false",
+            q=f"'{id_lider}' in parents and trashed = false",
             fields="files(id, name, createdTime)").execute().get("files", [])
 
-        arquivos_filtrados = [f for f in arquivos if re.search(rf"relatorio_consolidado_{re.escape(emailLider)}_.*\\.json", f["name"], re.IGNORECASE)]
+        padrao = re.compile(rf"relatorio_consolidado_{re.escape(emailLider)}_.*\\.json", re.IGNORECASE)
+        arquivos_filtrados = [f for f in arquivos if padrao.match(f["name"])]
+
         if not arquivos_filtrados:
             return jsonify({"erro": "Arquivo de relatório consolidado não encontrado no Drive."}), 404
 
-        # Ordena por data de criação e pega o mais recente
-        arquivo_alvo = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)[0]
+        # Ordena por data de criação (opcional)
+        arquivos_ordenados = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)
+        file_id = arquivos_ordenados[0]["id"]
 
-        file_id = arquivo_alvo["id"]
         fh = io.BytesIO()
         request_drive = service.files().get_media(fileId=file_id)
         downloader = MediaIoBaseDownload(fh, request_drive)
@@ -244,73 +240,7 @@ def gerar_graficos_comparativos():
         json_str = fh.getvalue().decode("utf-8")
         json_data = json.loads(json_str)
 
-        matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
-        perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
-        arquetipos = matriz["ARQUETIPO"].unique()
-
-        def calcular_total_por_arquetipo(respostas):
-            totais = {a: 0 for a in arquetipos}
-            maximos = {a: 0 for a in arquetipos}
-            for cod, estrelas in respostas.items():
-                if not cod.startswith("Q"):
-                    continue
-                estrelas = int(estrelas)
-                for arq in arquetipos:
-                    chave = f"{arq}{estrelas}{cod}"
-                    linha = matriz[matriz["CHAVE"] == chave]
-                    if not linha.empty:
-                        totais[arq] += linha["PONTOS_OBTIDOS"].values[0]
-                        maximos[arq] += linha["PONTOS_MAXIMOS"].values[0]
-            return {a: round((totais[a] / maximos[a]) * 100, 1) if maximos[a] > 0 else 0 for a in arquetipos}
-
-        pct_auto = calcular_total_por_arquetipo(json_data["autoavaliacao"])
-
-        respostas_equipes = json_data["avaliacoesEquipe"]
-        qtd_respondentes = len(respostas_equipes)
-        media_equipes = {}
-        for cod in perguntas:
-            soma = sum([r.get(cod, 0) for r in respostas_equipes])
-            media_equipes[cod] = round(soma / qtd_respondentes, 1) if qtd_respondentes else 0
-
-        pct_equipe = calcular_total_por_arquetipo(media_equipes)
-
-        def gerar_grafico_completo_com_titulo(pct_auto, pct_equipe):
-            fig, ax = plt.subplots(figsize=(10, 5))
-            arqs = list(pct_auto.keys())
-            x = np.arange(len(arqs))
-            ax.bar(x - 0.2, [pct_auto[a] for a in arqs], width=0.4, label="Auto", color='royalblue')
-            ax.bar(x + 0.2, [pct_equipe[a] for a in arqs], width=0.4, label="Equipe", color='darkorange')
-            ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
-            ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
-            ax.set_xticks(x)
-            ax.set_xticklabels(arqs)
-            ax.set_ylim(0, 100)
-            ax.set_ylabel("%")
-            for i, a in enumerate(arqs):
-                ax.text(i - 0.25, pct_auto[a] + 1, f"{pct_auto[a]}%", fontsize=9)
-                ax.text(i + 0.05, pct_equipe[a] + 1, f"{pct_equipe[a]}%", fontsize=9)
-            titulo = "ARQUÉTIPOS DE GESTÃO"
-            subtitulo = f"Líder: {emailLider} — {empresa} / {codrodada} — Média Equipe: {qtd_respondentes} respondentes"
-            plt.title(f"{titulo}\n{subtitulo}")
-            plt.legend()
-            return fig
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            with PdfPages(tmp.name) as pdf:
-                pdf.savefig(gerar_grafico_completo_com_titulo(pct_auto, pct_equipe))
-
-        nome_pdf = "ARQUETIPOS_AUTO_VS_EQUIPE.pdf"
-        anteriores = service.files().list(
-            q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
-            fields="files(id)").execute()
-        for arq in anteriores.get("files", []):
-            service.files().delete(fileId=arq["id"]).execute()
-
-        file_metadata = {"name": nome_pdf, "parents": [id_lider]}
-        media = MediaFileUpload(tmp.name, mimetype="application/pdf")
-        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-
-        return jsonify({"mensagem": f"PDF salvo com sucesso com {qtd_respondentes} respondentes."})
+        return gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
