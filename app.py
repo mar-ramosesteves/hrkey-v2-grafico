@@ -47,7 +47,7 @@ def gerar_relatorio_json():
             arquivos = resultados.get('files', [])
             return arquivos[0]['id'] if arquivos else None
 
-        raiz_id = buscar_id_pasta("Avaliacoes RH", "root")
+        raiz_id = "1l4kOZwed-Yc5nHU4RBTmWQz3zYAlpniS?hl"
         if not raiz_id:
             return jsonify({"erro": "Pasta raiz 'Avaliacoes RH' não encontrada."}), 404
 
