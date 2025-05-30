@@ -339,6 +339,9 @@ def gerar_graficos_comparativos():
         json_str = fh.getvalue().decode("utf-8")
         json_data = json.loads(json_str)
 
+        print("🧪 Conteúdo de json_data:")
+        print(json.dumps(json_data, indent=2))
+
         # ✅ Gera e salva os dois PDFs na pasta do líder
         gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
