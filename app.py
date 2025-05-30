@@ -183,6 +183,105 @@ def salvar_json_consolidado():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+    import tempfile
+    import numpy as np
+    import re
+
+    matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+    perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
+    arquetipos = matriz["ARQUETIPO"].unique()
+
+    # Calcular média por questão da equipe
+    respostas_equipes = json_data.get("avaliacoesEquipe", [])
+    media_equipes = {
+        cod: round(np.mean([resp.get(cod, 0) for resp in respostas_equipes]), 1)
+        for cod in perguntas
+    }
+
+    # Função para calcular percentuais cruzando com a matriz por chave
+    def calcular_percentuais(tipo, respostas):
+        total_por_arquetipo = {a: 0 for a in arquetipos}
+        max_por_arquetipo = {a: 0 for a in arquetipos}
+
+        for cod in perguntas:
+            estrelas = respostas.get(cod, 0)
+            for arq in arquetipos:
+                chave = f"{arq}{int(estrelas)}{cod}"
+                linha = matriz[matriz["CHAVE"] == chave]
+                if not linha.empty:
+                    pontos = linha["PONTOS_OBTIDOS"].values[0]
+                    maximo = linha["PONTOS_MAXIMOS"].values[0]
+                    total_por_arquetipo[arq] += pontos
+                    max_por_arquetipo[arq] += maximo
+
+        return {
+            a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
+            for a in arquetipos
+        }
+
+    pct_auto = calcular_percentuais("autoavaliacao", json_data["autoavaliacao"])
+    pct_equipes = calcular_percentuais("mediaEquipe", media_equipes)
+
+    # Gráfico de barras principal
+    def plot_grafico_comparativo():
+        fig, ax = plt.subplots(figsize=(10, 6))
+        x = np.arange(len(arquetipos))
+        ax.bar(x - 0.2, [pct_auto[a] for a in arquetipos], width=0.4, label="Auto", color='royalblue')
+        ax.bar(x + 0.2, [pct_equipes[a] for a in arquetipos], width=0.4, label="Equipe", color='darkorange')
+        ax.set_xticks(x)
+        ax.set_xticklabels(arquetipos)
+        ax.set_ylim(0, 100)
+        ax.set_yticks(np.arange(0, 110, 10))
+        ax.set_ylabel("%")
+        ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
+        ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
+        for i, arq in enumerate(arquetipos):
+            ax.text(i - 0.2, pct_auto[arq] + 1, f"{pct_auto[arq]}%", ha='center', fontsize=9)
+            ax.text(i + 0.2, pct_equipes[arq] + 1, f"{pct_equipes[arq]}%", ha='center', fontsize=9)
+        titulo = "ARQUÉTIPOS DE GESTÃO"
+        subtitulo = f"{emailLider} | {codrodada} | {empresa}"
+        ax.set_title(f"{titulo}\n{subtitulo}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
+        ax.legend()
+        fig.tight_layout()
+        return fig
+
+    # PDF principal
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        with PdfPages(tmp.name) as pdf:
+            pdf.savefig(plot_grafico_comparativo())
+        from googleapiclient.http import MediaFileUpload
+        nome_pdf = "ARQUETIPOS_AUTO_VS_EQUIPE.pdf"
+
+        # Salvar no Drive (na pasta do líder)
+        def encontrar_pasta(nome, id_pai):
+            resultado = service.files().list(
+                q=f"'{id_pai}' in parents and name = '{nome}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+                fields="files(id)").execute()
+            arquivos = resultado.get("files", [])
+            return arquivos[0]["id"] if arquivos else None
+
+        id_empresa = encontrar_pasta(empresa, PASTA_RAIZ)
+        id_rodada = encontrar_pasta(codrodada, id_empresa)
+        id_lider = encontrar_pasta(emailLider, id_rodada)
+
+        anteriores = service.files().list(
+            q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
+            fields="files(id)").execute()
+        for arq in anteriores.get("files", []):
+            service.files().delete(fileId=arq["id"]).execute()
+
+        file_metadata = {"name": nome_pdf, "parents": [id_lider]}
+        media = MediaFileUpload(tmp.name, mimetype="application/pdf")
+        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+
+
+
+
+
 @app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
 def gerar_graficos_comparativos():
     if request.method == "OPTIONS":
