@@ -160,7 +160,33 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
     id_rodada = garantir_pasta(codrodada, id_empresa)
     id_lider = garantir_pasta(emailLider, id_rodada)
+        def plot_grafico_comparativo():
+        fig, ax = plt.subplots(figsize=(10, 6))
+        x = np.arange(len(arquetipos))
+        ax.bar(x - 0.2, [pct_auto[a] for a in arquetipos], width=0.4, label="Auto", color='royalblue')
+        ax.bar(x + 0.2, [pct_equipes[a] for a in arquetipos], width=0.4, label="Equipe", color='darkorange')
+        ax.set_xticks(x)
+        ax.set_xticklabels(arquetipos)
+        ax.set_ylim(0, 100)
+        ax.set_yticks(np.arange(0, 110, 10))
+        ax.set_ylabel("%")
+        ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
+        ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
+        for i, arq in enumerate(arquetipos):
+            ax.text(i - 0.2, pct_auto[arq] + 1, f"{pct_auto[arq]}%", ha='center', fontsize=9)
+            ax.text(i + 0.2, pct_equipes[arq] + 1, f"{pct_equipes[arq]}%", ha='center', fontsize=9)
+        titulo = "ARQUÉTIPOS DE GESTÃO"
+        subtitulo = f"{emailLider} | {codrodada} | {empresa}"
+        ax.set_title(f"{titulo}\n{subtitulo}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
+        ax.legend()
+        fig.tight_layout()
+        return fig
 
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        with PdfPages(tmp.name) as pdf:
+            pdf.savefig(plot_grafico_comparativo())
+
+        nome_pdf = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
 
         anteriores = service.files().list(
             q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
@@ -172,11 +198,10 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         media = MediaFileUpload(tmp.name, mimetype="application/pdf")
         service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
+
 @app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
 def gerar_graficos_comparativos():
     if request.method == "OPTIONS":
-        print("🔥 Recebido preflight OPTIONS")
-
         response = jsonify({'status': 'CORS preflight OK'})
         response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
@@ -203,21 +228,15 @@ def gerar_graficos_comparativos():
         id_rodada = encontrar_pasta(codrodada, id_empresa)
         id_lider = encontrar_pasta(emailLider, id_rodada)
 
-        print("🔍 Buscando pasta do líder com nome:", emailLider)
-        print("📁 ID da empresa:", id_empresa)
-        print("📁 ID da rodada:", id_rodada)
-
         if not id_lider:
             return jsonify({"erro": "Pasta do líder não encontrada no Drive."}), 404
 
-        # 🔍 Buscar o arquivo do relatório consolidado (prefixo + qualquer sufixo)
-        import re
         prefixo = f"relatorio_consolidado_{emailLider}"
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains '{prefixo}' and trashed = false and mimeType='application/json'",
             fields="files(id, name, createdTime)").execute().get("files", [])
 
-        padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}.*\.json$", re.IGNORECASE)
+        padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}.*\\.json$", re.IGNORECASE)
         arquivos_filtrados = [f for f in arquivos_json if padrao.match(f["name"])]
 
         if not arquivos_filtrados:
@@ -236,10 +255,6 @@ def gerar_graficos_comparativos():
         json_str = fh.getvalue().decode("utf-8")
         json_data = json.loads(json_str)
 
-        print("🧪 Conteúdo de json_data:")
-        print(json.dumps(json_data, indent=2))
-
-        # ✅ Gera e salva os dois PDFs na pasta do líder
         gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
         return jsonify({"mensagem": f"PDFs salvos na pasta do líder com sucesso! ✅"})
@@ -250,8 +265,6 @@ def gerar_graficos_comparativos():
         response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
         response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
         return response, 500
-
-
 
 
 
