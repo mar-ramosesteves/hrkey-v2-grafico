@@ -160,7 +160,8 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
     id_rodada = garantir_pasta(codrodada, id_empresa)
     id_lider = garantir_pasta(emailLider, id_rodada)
-        def plot_grafico_comparativo():
+    
+    def plot_grafico_comparativo():
         fig, ax = plt.subplots(figsize=(10, 6))
         x = np.arange(len(arquetipos))
         ax.bar(x - 0.2, [pct_auto[a] for a in arquetipos], width=0.4, label="Auto", color='royalblue')
