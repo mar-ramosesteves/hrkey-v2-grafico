@@ -203,8 +203,9 @@ def gerar_graficos_comparativos():
 def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
     matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
     perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
-    arquetipos = matriz["ARQUETIPO"].unique()
+    arquetipos = ["Imperativo", "Consultivo", "Cuidativo", "Resoluto", "Prescritivo", "Formador"]
 
+    # 🟠 Passo 1: calcular média das avaliações da equipe
     respostas_equipes = json_data.get("avaliacoesEquipe", [])
     media_equipes = {}
     for cod in perguntas:
@@ -212,54 +213,61 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         media = round(np.mean(valores), 1) if valores else 0
         media_equipes[cod] = media
 
-    def calcular_percentuais(respostas):
-        total_por_arquetipo = {a: 0 for a in arquetipos}
-        max_por_arquetipo = {a: 0 for a in arquetipos}
+    # 🟡 Função para calcular % por arquétipo (idêntica à usada nos outros gráficos)
+    def calcular_percentuais(respostas_dict):
+        linhas = []
         for cod in perguntas:
-            estrelas = respostas.get(cod, 0)
+            nota = int(respostas_dict.get(cod, 0))
+            if nota < 1 or nota > 6:
+                continue
             for arq in arquetipos:
-                chave = f"{arq}{int(estrelas)}{cod}"
-                linha = matriz[matriz["CHAVE"] == chave]
-                if not linha.empty:
-                    pontos = linha["PONTOS_OBTIDOS"].values[0]
-                    maximo = linha["PONTOS_MAXIMOS"].values[0]
-                    total_por_arquetipo[arq] += pontos
-                    max_por_arquetipo[arq] += maximo
-        return {
-            a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
-            for a in arquetipos
-        }
+                chave = f"{arq}{nota}{cod}"
+                match = matriz[matriz["CHAVE"] == chave]
+                if not match.empty:
+                    pontos = match.iloc[0]["PONTOS_OBTIDOS"]
+                    maximo = match.iloc[0]["PONTOS_MAXIMOS"]
+                    linhas.append((arq, pontos, maximo))
+
+        df = pd.DataFrame(linhas, columns=["ARQUETIPO", "PONTOS_OBTIDOS", "PONTOS_MAXIMOS"])
+        resumo = df.groupby("ARQUETIPO").sum()
+        resumo["PERCENTUAL"] = (resumo["PONTOS_OBTIDOS"] / resumo["PONTOS_MAXIMOS"]) * 100
+        return resumo["PERCENTUAL"].round(1).to_dict()
 
     pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}))
     pct_equipes = calcular_percentuais(media_equipes)
 
-    id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
-    id_rodada = garantir_pasta(codrodada, id_empresa)
-    id_lider = garantir_pasta(emailLider, id_rodada)
-
+    # 📊 Gráfico
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(arquetipos))
-    ax.bar(x - 0.2, [pct_auto[a] for a in arquetipos], width=0.4, label="Auto", color='royalblue')
-    ax.bar(x + 0.2, [pct_equipes[a] for a in arquetipos], width=0.4, label="Equipe", color='darkorange')
+    auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
+    equipe_vals = [pct_equipes.get(a, 0) for a in arquetipos]
+
+    ax.bar(x - 0.2, auto_vals, width=0.4, label="Autoavaliação", color='royalblue')
+    ax.bar(x + 0.2, equipe_vals, width=0.4, label="Média da Equipe", color='darkorange')
+
+    for i, (a, e) in enumerate(zip(auto_vals, equipe_vals)):
+        ax.text(i - 0.2, a + 1, f"{a:.1f}%", ha='center', fontsize=9)
+        ax.text(i + 0.2, e + 1, f"{e:.1f}%", ha='center', fontsize=9)
+
     ax.set_xticks(x)
     ax.set_xticklabels(arquetipos)
     ax.set_ylim(0, 100)
     ax.set_yticks(np.arange(0, 110, 10))
-    ax.set_ylabel("%")
     ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
     ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
-    for i, arq in enumerate(arquetipos):
-        ax.text(i - 0.2, pct_auto[arq] + 1, f"{pct_auto[arq]}%", ha='center', fontsize=9)
-        ax.text(i + 0.2, pct_equipes[arq] + 1, f"{pct_equipes[arq]}%", ha='center', fontsize=9)
-    titulo = "ARQUÉTIPOS DE GESTÃO"
-    subtitulo = f"{emailLider} | {codrodada} | {empresa}"
-    ax.set_title(f"{titulo}\n{subtitulo}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
+    ax.set_ylabel("Pontuação (%)")
+    ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
     ax.legend()
-    fig.tight_layout()
+    plt.tight_layout()
 
+    # 📥 Salvar no Drive
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         with PdfPages(tmp.name) as pdf:
             pdf.savefig(fig)
+
+        id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
+        id_rodada = garantir_pasta(codrodada, id_empresa)
+        id_lider = garantir_pasta(emailLider, id_rodada)
 
         nome_pdf = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
 
