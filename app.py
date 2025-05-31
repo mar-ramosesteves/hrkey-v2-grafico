@@ -303,6 +303,13 @@ id_rodada = garantir_pasta(codrodada, id_empresa)
 id_lider = garantir_pasta(emailLider, id_rodada)
 
 
+
+
+
+        
+
+        
+
         anteriores = service.files().list(
             q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
             fields="files(id)").execute()
