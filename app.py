@@ -282,9 +282,26 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
             arquivos = resultado.get("files", [])
             return arquivos[0]["id"] if arquivos else None
 
-        id_empresa = encontrar_pasta(empresa, PASTA_RAIZ)
-        id_rodada = encontrar_pasta(codrodada, id_empresa)
-        id_lider = encontrar_pasta(emailLider, id_rodada)
+        def garantir_pasta(nome, id_pai):
+    resultado = service.files().list(
+        q=f"'{id_pai}' in parents and name = '{nome}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        fields="files(id)").execute()
+    arquivos = resultado.get("files", [])
+    if arquivos:
+        return arquivos[0]["id"]
+    else:
+        pasta_metadata = {
+            "name": nome,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [id_pai]
+        }
+        nova_pasta = service.files().create(body=pasta_metadata, fields="id").execute()
+        return nova_pasta["id"]
+
+id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
+id_rodada = garantir_pasta(codrodada, id_empresa)
+id_lider = garantir_pasta(emailLider, id_rodada)
+
 
         anteriores = service.files().list(
             q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
