@@ -202,17 +202,10 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
     arquetipos = ["Imperativo", "Consultivo", "Cuidativo", "Resoluto", "Prescritivo", "Formador"]
 
-    # 🟠 Passo 1: calcular média das avaliações da equipe
-    respostas_equipes = json_data.get("avaliacoesEquipe", [])
-    media_equipes = {}
-    for cod in perguntas:
-        valores = [resp.get(cod, 0) for resp in respostas_equipes if cod in resp]
-        media = round(np.mean(valores), 1) if valores else 0
-        media_equipes[cod] = media
-
-    # 🟡 Função para calcular % por arquétipo (idêntica à usada nos outros gráficos)
+    # ✅ Calcula percentuais da autoavaliação
     def calcular_percentuais(respostas_dict):
-        linhas = []
+        total_por_arquetipo = {a: 0 for a in arquetipos}
+        max_por_arquetipo = {a: 0 for a in arquetipos}
         for cod in perguntas:
             try:
                 raw = respostas_dict.get(cod, 0)
@@ -224,28 +217,50 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
             for arq in arquetipos:
                 chave = f"{arq}{nota}{cod}"
-                match = matriz[matriz["CHAVE"] == chave]
-                if not match.empty:
-                    pontos = match.iloc[0]["PONTOS_OBTIDOS"]
-                    maximo = match.iloc[0]["PONTOS_MAXIMOS"]
-                    linhas.append((arq, pontos, maximo))
+                linha = matriz[matriz["CHAVE"] == chave]
+                if not linha.empty:
+                    pontos = linha["PONTOS_OBTIDOS"].values[0]
+                    maximo = linha["PONTOS_MAXIMOS"].values[0]
+                    total_por_arquetipo[arq] += pontos
+                    max_por_arquetipo[arq] += maximo
+        return {
+            a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
+            for a in arquetipos
+        }
 
-        df = pd.DataFrame(linhas, columns=["ARQUETIPO", "PONTOS_OBTIDOS", "PONTOS_MAXIMOS"])
-        resumo = df.groupby("ARQUETIPO").sum()
-        resumo["PERCENTUAL"] = (resumo["PONTOS_OBTIDOS"] / resumo["PONTOS_MAXIMOS"]) * 100
-        return resumo["PERCENTUAL"].round(1).to_dict()
+    # ✅ Calcula percentuais das avaliações da equipe
+    def calcular_percentuais_equipes(lista_respostas):
+        total_por_arquetipo = {a: 0 for a in arquetipos}
+        max_por_arquetipo = {a: 0 for a in arquetipos}
+        for resposta in lista_respostas:
+            for cod in perguntas:
+                try:
+                    raw = resposta.get(cod, 0)
+                    nota = int(round(float(raw)))
+                    if nota < 1 or nota > 6:
+                        continue
+                except:
+                    continue
 
-    auto_dict = json_data.get("autoavaliacao", {})
-    pct_auto = calcular_percentuais(auto_dict.get("respostas", {}))
+                for arq in arquetipos:
+                    chave = f"{arq}{nota}{cod}"
+                    linha = matriz[matriz["CHAVE"] == chave]
+                    if not linha.empty:
+                        pontos = linha["PONTOS_OBTIDOS"].values[0]
+                        maximo = linha["PONTOS_MAXIMOS"].values[0]
+                        total_por_arquetipo[arq] += pontos
+                        max_por_arquetipo[arq] += maximo
+        return {
+            a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
+            for a in arquetipos
+        }
 
-    pct_equipes = calcular_percentuais(media_equipes)
+    # Aplica as funções
+    respostas_equipes = json_data.get("avaliacoesEquipe", [])
+    pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}))
+    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
     # 📊 Gráfico
-
-    print("✅ AUTO:", pct_auto)
-    print("✅ EQUIPE:", pct_equipes)
-
-
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(arquetipos))
     auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
@@ -269,7 +284,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     ax.legend()
     plt.tight_layout()
 
-    # 📥 Salvar no Drive
+    # Salva o PDF no Drive
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         with PdfPages(tmp.name) as pdf:
             pdf.savefig(fig)
