@@ -234,6 +234,11 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     pct_equipes = calcular_percentuais(media_equipes)
 
     # 📊 Gráfico
+
+    print("✅ AUTO:", pct_auto)
+    print("✅ EQUIPE:", pct_equipes)
+
+
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(arquetipos))
     auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
