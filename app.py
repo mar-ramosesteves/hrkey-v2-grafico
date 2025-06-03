@@ -235,7 +235,9 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         resumo["PERCENTUAL"] = (resumo["PONTOS_OBTIDOS"] / resumo["PONTOS_MAXIMOS"]) * 100
         return resumo["PERCENTUAL"].round(1).to_dict()
 
-    pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}))
+    auto_dict = json_data.get("autoavaliacao", {})
+    pct_auto = calcular_percentuais(auto_dict.get("respostas", {}))
+
     pct_equipes = calcular_percentuais(media_equipes)
 
     # 📊 Gráfico
