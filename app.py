@@ -215,12 +215,12 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         linhas = []
         for cod in perguntas:
             try:
-    raw = respostas_dict.get(cod, 0)
-    nota = int(round(float(raw)))
-    if nota < 1 or nota > 6:
-        continue
-except:
-    continue
+                raw = respostas_dict.get(cod, 0)
+                nota = int(round(float(raw)))
+                if nota < 1 or nota > 6:
+                    continue
+            except:
+                continue
 
             for arq in arquetipos:
                 chave = f"{arq}{nota}{cod}"
