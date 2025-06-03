@@ -164,17 +164,12 @@ def gerar_graficos_comparativos():
         id_rodada = garantir_pasta(codrodada, id_empresa)
         id_lider = garantir_pasta(emailLider, id_rodada)
 
-        # Novo padrão de prefixo e regex para considerar data e hora
-        prefixo = f"relatorio_consolidado_{emailLider}_{codrodada}_"
+        prefixo = f"relatorio_consolidado_{emailLider}"
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains '{prefixo}' and trashed = false and mimeType='application/json'",
             fields="files(id, name, createdTime)").execute().get("files", [])
 
-        # Regex para encontrar arquivos com padrão completo
-        padrao = re.compile(
-            rf"^relatorio_consolidado_{re.escape(emailLider)}_{re.escape(codrodada)}_\d{{8}}_\d{{6}}\.json$",
-            re.IGNORECASE
-        )
+        padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}.*\.json$", re.IGNORECASE)
         arquivos_filtrados = [f for f in arquivos_json if padrao.match(f["name"])]
 
         if not arquivos_filtrados:
@@ -192,9 +187,11 @@ def gerar_graficos_comparativos():
             status, done = downloader.next_chunk()
 
         json_data = json.loads(fh.getvalue().decode("utf-8"))
+
+        # NOVO: usa a função oficial com layout validado
         gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
-        return jsonify({"mensagem": f"PDF gerado com sucesso."})
+        return jsonify({"mensagem": "✅ PDF gerado com sucesso e salvo no Drive."})
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
