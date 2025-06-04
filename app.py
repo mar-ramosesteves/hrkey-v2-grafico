@@ -229,7 +229,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         }
 
     # ✅ Calcula percentuais da equipe (com base em todas as respostas da equipe)
-    def calcular_percentuais_equipes(lista_respostas):
+def calcular_percentuais_equipes(lista_respostas):
     # Acumula os pontos por arquétipo e questão para todas as respostas
     acumulado_por_arq_questao = {}  # Ex: ("Formador", "Q01") → [3.0, 4.0, ...]
     total_maximo_por_arquetipo = {a: 0 for a in arquetipos}
@@ -265,11 +265,10 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         for arq in arquetipos
     }
 
-    # 📊 Aplica os cálculos
-    respostas_equipes = json_data.get("avaliacoesEquipe", [])
-    pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}).get("respostas", {}))
-
-    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+# 📊 Aplica os cálculos
+respostas_equipes = json_data.get("avaliacoesEquipe", [])
+pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}).get("respostas", {}))
+pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
     print("🔎 AUTOAVALIAÇÃO BRUTA:", json_data.get("autoavaliacao", {}))
     print("📊 PERCENTUAIS AUTO:", pct_auto)
