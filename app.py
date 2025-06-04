@@ -228,49 +228,45 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
             for a in arquetipos
         }
 
-    
-    # Aplica as funções
-respostas_equipes = json_data.get("avaliacoesEquipe", [])
-pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}))
+    # ✅ Calcula percentuais da equipe (com base em todas as respostas da equipe)
+    def calcular_percentuais_equipes(lista_respostas):
+        total_por_arquetipo = {a: 0 for a in arquetipos}
+        max_por_arquetipo = {a: 0 for a in arquetipos}
+        for resposta in lista_respostas:
+            respostas_dict = resposta.get("respostas", {})
+            for cod in perguntas:
+                try:
+                    raw = respostas_dict.get(cod, 0)
+                    nota = int(round(float(raw)))
+                    if nota < 1 or nota > 6:
+                        continue
+                except:
+                    continue
 
-def calcular_percentuais_equipes(lista_respostas):
-    total_por_arquetipo = {a: 0 for a in arquetipos}
-    max_por_arquetipo = {a: 0 for a in arquetipos}
+                for arq in arquetipos:
+                    chave = f"{arq}{nota}{cod}"
+                    linha = matriz[matriz["CHAVE"] == chave]
+                    if not linha.empty:
+                        pontos = linha["PONTOS_OBTIDOS"].values[0]
+                        maximo = linha["PONTOS_MAXIMOS"].values[0]
+                        total_por_arquetipo[arq] += pontos
+                        max_por_arquetipo[arq] += maximo
+        return {
+            a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
+            for a in arquetipos
+        }
 
-    for resposta in lista_respostas:
-        respostas_dict = resposta.get("respostas", {})
-        for cod in perguntas:
-            nota_raw = respostas_dict.get(cod)
-            try:
-                nota = int(nota_raw)
-            except:
-                continue
-            if nota < 1 or nota > 6:
-                continue
-            for arq in arquetipos:
-                chave = f"{arq}{nota}{cod}"
-                linha = matriz[matriz["CHAVE"] == chave]
-                if not linha.empty:
-                    pontos = linha["PONTOS_OBTIDOS"].values[0]
-                    maximo = linha["PONTOS_MAXIMOS"].values[0]
-                    total_por_arquetipo[arq] += pontos
-                    max_por_arquetipo[arq] += maximo
+    # 📊 Aplica os cálculos
+    respostas_equipes = json_data.get("avaliacoesEquipe", [])
+    pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}))
+    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
-    return {
-        a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1)
-        if max_por_arquetipo[a] > 0 else 0
-        for a in arquetipos
-    }
+    print("🔎 AUTOAVALIAÇÃO BRUTA:", json_data.get("autoavaliacao", {}))
+    print("📊 PERCENTUAIS AUTO:", pct_auto)
+    print("🔎 AVALIAÇÕES DA EQUIPE:", respostas_equipes)
+    print("📊 PERCENTUAIS EQUIPE:", pct_equipes)
 
-pct_equipes = calcular_percentuais_equipes(respostas_equipes)
-
-print("🔎 AUTOAVALIAÇÃO BRUTA:", json_data.get("autoavaliacao", {}))
-print("📊 PERCENTUAIS AUTO:", pct_auto)
-print("🔎 AVALIAÇÕES DA EQUIPE:", respostas_equipes)
-print("📊 PERCENTUAIS EQUIPE:", pct_equipes)
-
-
-    # 📊 Gráfico
+    # 📈 Gera gráfico comparativo
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(arquetipos))
     auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
@@ -294,7 +290,7 @@ print("📊 PERCENTUAIS EQUIPE:", pct_equipes)
     ax.legend()
     plt.tight_layout()
 
-    # Salva o PDF no Drive
+    # 💾 Salva no Drive
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         with PdfPages(tmp.name) as pdf:
             pdf.savefig(fig)
