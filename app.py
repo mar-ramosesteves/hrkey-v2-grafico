@@ -260,7 +260,37 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}))
     
 
-    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+    def calcular_percentuais_equipes(lista_respostas):
+    total_por_arquetipo = {a: 0 for a in arquetipos}
+    max_por_arquetipo = {a: 0 for a in arquetipos}
+
+    for resposta in lista_respostas:
+        respostas_dict = resposta.get("respostas", {})
+        for cod in perguntas:
+            nota_raw = respostas_dict.get(cod)
+            try:
+                nota = int(nota_raw)
+            except:
+                continue
+            if nota < 1 or nota > 6:
+                continue
+            for arq in arquetipos:
+                chave = f"{arq}{nota}{cod}"
+                linha = matriz[matriz["CHAVE"] == chave]
+                if not linha.empty:
+                    pontos = linha["PONTOS_OBTIDOS"].values[0]
+                    maximo = linha["PONTOS_MAXIMOS"].values[0]
+                    total_por_arquetipo[arq] += pontos
+                    max_por_arquetipo[arq] += maximo
+
+    return {
+        a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1)
+        if max_por_arquetipo[a] > 0 else 0
+        for a in arquetipos
+    }
+
+pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+
 
     print("🔎 AUTOAVALIAÇÃO BRUTA:", json_data.get("autoavaliacao", {}))
     print("📊 PERCENTUAIS AUTO:", pct_auto)
