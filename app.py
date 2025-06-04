@@ -56,7 +56,7 @@ def garantir_pasta(nome, id_pai):
         nova_pasta = service.files().create(body=pasta_metadata, fields="id").execute()
         return nova_pasta["id"]
 
-# 📥 Salva relatório consolidado (JSON)
+# 📅 Salva relatório consolidado (JSON)
 @app.route("/salvar-json-consolidado", methods=["POST"])
 def salvar_json_consolidado():
     try:
@@ -175,7 +175,6 @@ def gerar_graficos_comparativos():
         if not arquivos_filtrados:
             return jsonify({"erro": "Arquivo de relatório consolidado não encontrado no Drive."}), 404
 
-        # Pega o mais recente
         arquivo_alvo = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)[0]
         file_id = arquivo_alvo["id"]
 
@@ -188,7 +187,6 @@ def gerar_graficos_comparativos():
 
         json_data = json.loads(fh.getvalue().decode("utf-8"))
 
-        # NOVO: usa a função oficial com layout validado
         gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
         return jsonify({"mensagem": "✅ PDF gerado com sucesso e salvo no Drive."})
@@ -202,7 +200,6 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
     arquetipos = ["Imperativo", "Consultivo", "Cuidativo", "Resoluto", "Prescritivo", "Formador"]
 
-    # ✅ Calcula percentuais da autoavaliação
     def calcular_percentuais(respostas_dict):
         total_por_arquetipo = {a: 0 for a in arquetipos}
         max_por_arquetipo = {a: 0 for a in arquetipos}
@@ -228,54 +225,44 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
             for a in arquetipos
         }
 
-    # ✅ Calcula percentuais da equipe (com base em todas as respostas da equipe)
-def calcular_percentuais_equipes(lista_respostas):
-    # Acumula os pontos por arquétipo e questão para todas as respostas
-    acumulado_por_arq_questao = {}  # Ex: ("Formador", "Q01") → [3.0, 4.0, ...]
-    total_maximo_por_arquetipo = {a: 0 for a in arquetipos}
+    def calcular_percentuais_equipes(lista_respostas):
+        acumulado_por_arq_questao = {}
+        total_maximo_por_arquetipo = {a: 0 for a in arquetipos}
 
-    for resposta in lista_respostas:
-        respostas_dict = resposta.get("respostas", {})
-        for cod in perguntas:
-            try:
-                nota = int(respostas_dict.get(cod))
-                if nota < 1 or nota > 6:
+        for resposta in lista_respostas:
+            respostas_dict = resposta.get("respostas", {})
+            for cod in perguntas:
+                try:
+                    nota = int(respostas_dict.get(cod))
+                    if nota < 1 or nota > 6:
+                        continue
+                except:
                     continue
-            except:
-                continue
 
-            for arq in arquetipos:
-                chave = f"{arq}{nota}{cod}"
-                linha = matriz[matriz["CHAVE"] == chave]
-                if not linha.empty:
-                    pontos = linha["PONTOS_OBTIDOS"].values[0]
-                    maximo = linha["PONTOS_MAXIMOS"].values[0]
+                for arq in arquetipos:
+                    chave = f"{arq}{nota}{cod}"
+                    linha = matriz[matriz["CHAVE"] == chave]
+                    if not linha.empty:
+                        pontos = linha["PONTOS_OBTIDOS"].values[0]
+                        maximo = linha["PONTOS_MAXIMOS"].values[0]
+                        acumulado_por_arq_questao.setdefault((arq, cod), []).append(pontos)
+                        total_maximo_por_arquetipo[arq] += maximo
 
-                    acumulado_por_arq_questao.setdefault((arq, cod), []).append(pontos)
-                    total_maximo_por_arquetipo[arq] += maximo
+        total_medio_por_arquetipo = {a: 0 for a in arquetipos}
+        for (arq, cod), lista_pontos in acumulado_por_arq_questao.items():
+            media_pontos = sum(lista_pontos) / len(lista_pontos)
+            total_medio_por_arquetipo[arq] += media_pontos
 
-    total_medio_por_arquetipo = {a: 0 for a in arquetipos}
-    for (arq, cod), lista_pontos in acumulado_por_arq_questao.items():
-        media_pontos = sum(lista_pontos) / len(lista_pontos)
-        total_medio_por_arquetipo[arq] += media_pontos
+        return {
+            arq: round((total_medio_por_arquetipo[arq] / total_maximo_por_arquetipo[arq]) * 100, 1)
+            if total_maximo_por_arquetipo[arq] > 0 else 0
+            for arq in arquetipos
+        }
 
-    return {
-        arq: round((total_medio_por_arquetipo[arq] / total_maximo_por_arquetipo[arq]) * 100, 1)
-        if total_maximo_por_arquetipo[arq] > 0 else 0
-        for arq in arquetipos
-    }
+    respostas_equipes = json_data.get("avaliacoesEquipe", [])
+    pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}).get("respostas", {}))
+    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
-# 📊 Aplica os cálculos
-respostas_equipes = json_data.get("avaliacoesEquipe", [])
-pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}).get("respostas", {}))
-pct_equipes = calcular_percentuais_equipes(respostas_equipes)
-
-    print("🔎 AUTOAVALIAÇÃO BRUTA:", json_data.get("autoavaliacao", {}))
-    print("📊 PERCENTUAIS AUTO:", pct_auto)
-    print("🔎 AVALIAÇÕES DA EQUIPE:", respostas_equipes)
-    print("📊 PERCENTUAIS EQUIPE:", pct_equipes)
-
-    # 📈 Gera gráfico comparativo
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(arquetipos))
     auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
@@ -299,7 +286,6 @@ pct_equipes = calcular_percentuais_equipes(respostas_equipes)
     ax.legend()
     plt.tight_layout()
 
-    # 💾 Salva no Drive
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         with PdfPages(tmp.name) as pdf:
             pdf.savefig(fig)
@@ -319,7 +305,3 @@ pct_equipes = calcular_percentuais_equipes(respostas_equipes)
         file_metadata = {"name": nome_pdf, "parents": [id_lider]}
         media = MediaFileUpload(tmp.name, mimetype="application/pdf")
         service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-
-
-
-
