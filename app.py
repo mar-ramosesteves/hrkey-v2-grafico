@@ -230,31 +230,40 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
     # ✅ Calcula percentuais da equipe (com base em todas as respostas da equipe)
     def calcular_percentuais_equipes(lista_respostas):
-        total_por_arquetipo = {a: 0 for a in arquetipos}
-        max_por_arquetipo = {a: 0 for a in arquetipos}
-        for resposta in lista_respostas:
-            respostas_dict = resposta.get("respostas", {})
-            for cod in perguntas:
-                try:
-                    raw = respostas_dict.get(cod, 0)
-                    nota = int(round(float(raw)))
-                    if nota < 1 or nota > 6:
-                        continue
-                except:
-                    continue
+    # Acumula os pontos por arquétipo e questão para todas as respostas
+    acumulado_por_arq_questao = {}  # Ex: ("Formador", "Q01") → [3.0, 4.0, ...]
+    total_maximo_por_arquetipo = {a: 0 for a in arquetipos}
 
-                for arq in arquetipos:
-                    chave = f"{arq}{nota}{cod}"
-                    linha = matriz[matriz["CHAVE"] == chave]
-                    if not linha.empty:
-                        pontos = linha["PONTOS_OBTIDOS"].values[0]
-                        maximo = linha["PONTOS_MAXIMOS"].values[0]
-                        total_por_arquetipo[arq] += pontos
-                        max_por_arquetipo[arq] += maximo
-        return {
-            a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
-            for a in arquetipos
-        }
+    for resposta in lista_respostas:
+        respostas_dict = resposta.get("respostas", {})
+        for cod in perguntas:
+            try:
+                nota = int(respostas_dict.get(cod))
+                if nota < 1 or nota > 6:
+                    continue
+            except:
+                continue
+
+            for arq in arquetipos:
+                chave = f"{arq}{nota}{cod}"
+                linha = matriz[matriz["CHAVE"] == chave]
+                if not linha.empty:
+                    pontos = linha["PONTOS_OBTIDOS"].values[0]
+                    maximo = linha["PONTOS_MAXIMOS"].values[0]
+
+                    acumulado_por_arq_questao.setdefault((arq, cod), []).append(pontos)
+                    total_maximo_por_arquetipo[arq] += maximo
+
+    total_medio_por_arquetipo = {a: 0 for a in arquetipos}
+    for (arq, cod), lista_pontos in acumulado_por_arq_questao.items():
+        media_pontos = sum(lista_pontos) / len(lista_pontos)
+        total_medio_por_arquetipo[arq] += media_pontos
+
+    return {
+        arq: round((total_medio_por_arquetipo[arq] / total_maximo_por_arquetipo[arq]) * 100, 1)
+        if total_maximo_por_arquetipo[arq] > 0 else 0
+        for arq in arquetipos
+    }
 
     # 📊 Aplica os cálculos
     respostas_equipes = json_data.get("avaliacoesEquipe", [])
