@@ -258,7 +258,15 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     # Aplica as funções
     respostas_equipes = json_data.get("avaliacoesEquipe", [])
     pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}))
+    
+
     pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+
+    print("🔎 AUTOAVALIAÇÃO BRUTA:", json_data.get("autoavaliacao", {}))
+    print("📊 PERCENTUAIS AUTO:", pct_auto)
+    print("🔎 AVALIAÇÕES DA EQUIPE:", respostas_equipes)
+    print("📊 PERCENTUAIS EQUIPE:", pct_equipes)
+
 
     # 📊 Gráfico
     fig, ax = plt.subplots(figsize=(10, 6))
