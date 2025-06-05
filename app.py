@@ -21,6 +21,10 @@ arquetipos = ["Visionário", "Executor", "Protetor", "Conector", "Condutor", "Me
 # ✅ Lista dos códigos das 49 perguntas
 perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
 
+# ✅ Carrega a matriz de cálculo com a coluna CHAVE
+matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+
+
 
 # 🔐 Autenticação Google Drive
 SCOPES = ['https://www.googleapis.com/auth/drive']
