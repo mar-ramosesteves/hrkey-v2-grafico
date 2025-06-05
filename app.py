@@ -196,57 +196,6 @@ def gerar_graficos_comparativos():
 
 # 📈 Função de geração do gráfico com PDF
 def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
-    matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
-    perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
-    arquetipos = ["Imperativo", "Consultivo", "Cuidativo", "Resoluto", "Prescritivo", "Formador"]
-
-    def calcular_percentuais(respostas_dict):
-        total_por_arquetipo = {a: 0 for a in arquetipos}
-        max_por_arquetipo = {a: 0 for a in arquetipos}
-        for cod in perguntas:
-            try:
-                raw = respostas_dict.get(cod, 0)
-                nota = int(round(float(raw)))
-                if nota < 1 or nota > 6:
-                    continue
-            except:
-                continue
-
-            for arq in arquetipos:
-                chave = f"{arq}{nota}{cod}"
-                linha = matriz[matriz["CHAVE"] == chave]
-                if not linha.empty:
-                    pontos = linha["PONTOS_OBTIDOS"].values[0]
-                    maximo = linha["PONTOS_MAXIMOS"].values[0]
-                    total_por_arquetipo[arq] += pontos
-                    max_por_arquetipo[arq] += maximo
-        return {
-            a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
-            for a in arquetipos
-        }
-
-def calcular_percentuais_equipes(lista_respostas):
-    totais_acumulados = {a: 0 for a in arquetipos}
-    total_avaliacoes = 0
-
-    for resposta in lista_respostas:
-        respostas_dict = resposta.get("respostas", {})
-        if not respostas_dict:
-            continue
-
-        percentuais_individuais = calcular_percentuais(respostas_dict)
-        for arq in arquetipos:
-            totais_acumulados[arq] += percentuais_individuais.get(arq, 0)
-        total_avaliacoes += 1
-
-    if total_avaliacoes == 0:
-        return {a: 0 for a in arquetipos}
-
-    return {
-        arq: round(totais_acumulados[arq] / total_avaliacoes, 1)
-        for arq in arquetipos
-    }
-
     respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
     respostas_equipes = json_data.get("avaliacoesEquipe", [])
 
@@ -292,6 +241,14 @@ def calcular_percentuais_equipes(lista_respostas):
         for arq in anteriores.get("files", []):
             service.files().delete(fileId=arq["id"]).execute()
 
+        import time
+        time.sleep(1)
+
         file_metadata = {"name": nome_pdf, "parents": [id_lider]}
-        media = MediaFileUpload(tmp.name, mimetype="application/pdf")
-        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+        media = MediaFileUpload(tmp.name, mimetype="application/pdf", resumable=False)
+
+        try:
+            enviado = service.files().create(body=file_metadata, media_body=media, fields="id, name, parents").execute()
+            print(f"✅ PDF gerado e enviado com sucesso: {enviado['name']} | ID: {enviado['id']} | Pasta: {id_lider}")
+        except Exception as e:
+            print(f"❌ ERRO ao tentar salvar o PDF no Drive: {str(e)}")
