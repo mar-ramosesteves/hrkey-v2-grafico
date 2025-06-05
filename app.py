@@ -276,10 +276,8 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         arq: round((total_obtido[arq] / total_maximo[arq]) * 100, 1) if total_maximo[arq] > 0 else 0
         for arq in arquetipos
     }
-    respostas_equipes = json_data.get("avaliacoesEquipe", [])
-    pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}).get("respostas", {}))
-    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
+    
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(arquetipos))
     auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
