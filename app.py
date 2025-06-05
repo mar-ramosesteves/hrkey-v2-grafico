@@ -15,6 +15,13 @@ import tempfile
 import numpy as np
 import re
 
+# ✅ Lista dos arquétipos usados no sistema
+arquetipos = ["Visionário", "Executor", "Protetor", "Conector", "Condutor", "Mentor"]
+
+# ✅ Lista dos códigos das 49 perguntas
+perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
+
+
 # 🔐 Autenticação Google Drive
 SCOPES = ['https://www.googleapis.com/auth/drive']
 creds = service_account.Credentials.from_service_account_info(
