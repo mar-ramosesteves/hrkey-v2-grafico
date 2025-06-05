@@ -225,53 +225,27 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
             for a in arquetipos
         }
 
-    def calcular_percentuais_equipes(lista_respostas):
-        acumulado_por_arq_questao = {}
+def calcular_percentuais_equipes(lista_respostas):
+    totais_acumulados = {a: 0 for a in arquetipos}
+    total_avaliacoes = 0
 
-        for resposta in lista_respostas:
-            respostas_dict = resposta.get("respostas", {})
-            for cod in perguntas:
-                try:
-                    nota = int(respostas_dict.get(cod))
-                    if nota < 1 or nota > 6:
-                        continue
-                except:
-                    continue
+    for resposta in lista_respostas:
+        respostas_dict = resposta.get("respostas", {})
+        if not respostas_dict:
+            continue
 
-                for arq in arquetipos:
-                    chave = f"{arq}{nota}{cod}"
-                    linha = matriz[matriz["CHAVE"] == chave]
-                    if not linha.empty:
-                        pontos = linha["PONTOS_OBTIDOS"].values[0]
-                        acumulado_por_arq_questao.setdefault((arq, cod), []).append(pontos)
-
-        media_por_questao = {}
-        for (arq, cod), pontos_lista in acumulado_por_arq_questao.items():
-            media = sum(pontos_lista) / len(pontos_lista)
-            media_por_questao[(arq, cod)] = media
-
-        maximos_por_questao = {}
-        for cod in perguntas:
-            for arq in arquetipos:
-                linha = matriz[(matriz["CHAVE"].str.endswith(cod)) & (matriz["CHAVE"].str.startswith(arq))]
-                if not linha.empty:
-                    maximo = linha["PONTOS_MAXIMOS"].iloc[0]
-                    maximos_por_questao[(arq, cod)] = maximo
-
-        total_obtido = {a: 0 for a in arquetipos}
-        total_maximo = {a: 0 for a in arquetipos}
-
+        percentuais_individuais = calcular_percentuais(respostas_dict)
         for arq in arquetipos:
-            for cod in perguntas:
-                media = media_por_questao.get((arq, cod), 0)
-                maximo = maximos_por_questao.get((arq, cod), 0)
-                total_obtido[arq] += media
-                total_maximo[arq] += maximo
+            totais_acumulados[arq] += percentuais_individuais.get(arq, 0)
+        total_avaliacoes += 1
 
-        return {
-            arq: round((total_obtido[arq] / total_maximo[arq]) * 100, 1) if total_maximo[arq] > 0 else 0
-            for arq in arquetipos
-        }
+    if total_avaliacoes == 0:
+        return {a: 0 for a in arquetipos}
+
+    return {
+        arq: round(totais_acumulados[arq] / total_avaliacoes, 1)
+        for arq in arquetipos
+    }
 
     respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
     respostas_equipes = json_data.get("avaliacoesEquipe", [])
