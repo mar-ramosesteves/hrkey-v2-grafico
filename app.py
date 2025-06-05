@@ -230,6 +230,34 @@ def calcular_percentuais(respostas_dict):
         a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
         for a in arquetipos
     }
+def calcular_percentuais_equipes(lista_respostas):
+    acumulado_por_arq = {a: 0 for a in arquetipos}
+    maximo_por_arq = {a: 0 for a in arquetipos}
+    contagens = {a: 0 for a in arquetipos}
+
+    for resposta in lista_respostas:
+        respostas_dict = resposta.get("respostas", {})
+        for cod in perguntas:
+            try:
+                nota = int(respostas_dict.get(cod))
+                if nota < 1 or nota > 6:
+                    continue
+            except:
+                continue
+
+            for arq in arquetipos:
+                chave = f"{arq}{nota}{cod}"
+                linha = matriz[matriz["CHAVE"] == chave]
+                if not linha.empty:
+                    pontos = linha["PONTOS_OBTIDOS"].values[0]
+                    maximo = linha["PONTOS_MAXIMOS"].values[0]
+                    acumulado_por_arq[arq] += pontos
+                    maximo_por_arq[arq] += maximo
+
+    return {
+        a: round((acumulado_por_arq[a] / maximo_por_arq[a]) * 100, 1) if maximo_por_arq[a] > 0 else 0
+        for a in arquetipos
+    }
 
 
 # 📈 Função de geração do gráfico com PDF
