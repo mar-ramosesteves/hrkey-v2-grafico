@@ -226,39 +226,56 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         }
 
     def calcular_percentuais_equipes(lista_respostas):
-        acumulado_por_arq_questao = {}
-        total_maximo_por_arquetipo = {a: 0 for a in arquetipos}
+    acumulado_por_arq_questao = {}
 
-        for resposta in lista_respostas:
-            respostas_dict = resposta.get("respostas", {})
-            for cod in perguntas:
-                try:
-                    nota = int(respostas_dict.get(cod))
-                    if nota < 1 or nota > 6:
-                        continue
-                except:
+    for resposta in lista_respostas:
+        respostas_dict = resposta.get("respostas", {})
+        for cod in perguntas:
+            try:
+                nota = int(respostas_dict.get(cod))
+                if nota < 1 or nota > 6:
                     continue
+            except:
+                continue
 
-                for arq in arquetipos:
-                    chave = f"{arq}{nota}{cod}"
-                    linha = matriz[matriz["CHAVE"] == chave]
-                    if not linha.empty:
-                        pontos = linha["PONTOS_OBTIDOS"].values[0]
-                        maximo = linha["PONTOS_MAXIMOS"].values[0]
-                        acumulado_por_arq_questao.setdefault((arq, cod), []).append(pontos)
-                        total_maximo_por_arquetipo[arq] += maximo
+            for arq in arquetipos:
+                chave = f"{arq}{nota}{cod}"
+                linha = matriz[matriz["CHAVE"] == chave]
+                if not linha.empty:
+                    pontos = linha["PONTOS_OBTIDOS"].values[0]
+                    acumulado_por_arq_questao.setdefault((arq, cod), []).append(pontos)
 
-        total_medio_por_arquetipo = {a: 0 for a in arquetipos}
-        for (arq, cod), lista_pontos in acumulado_por_arq_questao.items():
-            media_pontos = sum(lista_pontos) / len(lista_pontos)
-            total_medio_por_arquetipo[arq] += media_pontos
+    # 1. Calcular média de pontos obtidos por questão e arquétipo
+    media_por_questao = {}
+    for (arq, cod), pontos_lista in acumulado_por_arq_questao.items():
+        media = sum(pontos_lista) / len(pontos_lista)
+        media_por_questao[(arq, cod)] = media
 
-        return {
-            arq: round((total_medio_por_arquetipo[arq] / total_maximo_por_arquetipo[arq]) * 100, 1)
-            if total_maximo_por_arquetipo[arq] > 0 else 0
-            for arq in arquetipos
-        }
+    # 2. Obter os pontos máximos por questão e arquétipo (são fixos)
+    maximos_por_questao = {}
+    for cod in perguntas:
+        for arq in arquetipos:
+            linha = matriz[(matriz["CHAVE"].str.endswith(cod)) & (matriz["CHAVE"].str.startswith(arq))]
+            if not linha.empty:
+                maximo = linha["PONTOS_MAXIMOS"].iloc[0]
+                maximos_por_questao[(arq, cod)] = maximo
 
+    # 3. Calcular total de pontos médios e totais máximos por arquétipo
+    total_obtido = {a: 0 for a in arquetipos}
+    total_maximo = {a: 0 for a in arquetipos}
+
+    for arq in arquetipos:
+        for cod in perguntas:
+            media = media_por_questao.get((arq, cod), 0)
+            maximo = maximos_por_questao.get((arq, cod), 0)
+            total_obtido[arq] += media
+            total_maximo[arq] += maximo
+
+    # 4. Calcular o percentual final por arquétipo
+    return {
+        arq: round((total_obtido[arq] / total_maximo[arq]) * 100, 1) if total_maximo[arq] > 0 else 0
+        for arq in arquetipos
+    }
     respostas_equipes = json_data.get("avaliacoesEquipe", [])
     pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}).get("respostas", {}))
     pct_equipes = calcular_percentuais_equipes(respostas_equipes)
