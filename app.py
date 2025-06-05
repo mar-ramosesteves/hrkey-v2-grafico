@@ -194,6 +194,33 @@ def gerar_graficos_comparativos():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+
+def calcular_percentuais(respostas_dict):
+    total_por_arquetipo = {a: 0 for a in arquetipos}
+    max_por_arquetipo = {a: 0 for a in arquetipos}
+    for cod in perguntas:
+        try:
+            raw = respostas_dict.get(cod, 0)
+            nota = int(round(float(raw)))
+            if nota < 1 or nota > 6:
+                continue
+        except:
+            continue
+
+        for arq in arquetipos:
+            chave = f"{arq}{nota}{cod}"
+            linha = matriz[matriz["CHAVE"] == chave]
+            if not linha.empty:
+                pontos = linha["PONTOS_OBTIDOS"].values[0]
+                maximo = linha["PONTOS_MAXIMOS"].values[0]
+                total_por_arquetipo[arq] += pontos
+                max_por_arquetipo[arq] += maximo
+    return {
+        a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
+        for a in arquetipos
+    }
+
+
 # 📈 Função de geração do gráfico com PDF
 def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
     respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
