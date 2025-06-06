@@ -16,6 +16,13 @@ import numpy as np
 import re
 import time
 
+import json
+
+# Carrega o dicionário de arquétipos dominantes por questão
+with open("arquetipos_dominantes_por_questao.json", encoding="utf-8") as f:
+    arquetipos_dominantes = json.load(f)
+
+
 # ✅ Lista dos códigos das 49 perguntas
 perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
 
