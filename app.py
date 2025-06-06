@@ -79,24 +79,26 @@ def salvar_json_consolidado():
         id_lider = garantir_pasta(emailLider, id_rodada)
 
         # 🧹 Remove JSONs antigos do tipo relatorio_consolidado
-antigos = service.files().list(
-    q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType = 'application/json'",
-    fields="files(id)").execute().get("files", [])
+        antigos = service.files().list(
+            q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType = 'application/json'",
+            fields="files(id)").execute().get("files", [])
 
-for arq in antigos:
-    service.files().delete(fileId=arq["id"]).execute()
+        for arq in antigos:
+            service.files().delete(fileId=arq["id"]).execute()
 
-# 💾 Salva o novo JSON consolidado
-nome_arquivo = f"relatorio_consolidado_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-conteudo = json.dumps(dados, ensure_ascii=False, indent=2).encode("utf-8")
-file_metadata = {"name": nome_arquivo, "parents": [id_lider]}
-media = MediaIoBaseUpload(io.BytesIO(conteudo), mimetype="application/json")
-service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-
+        # 💾 Salva o novo JSON consolidado
+        nome_arquivo = f"relatorio_consolidado_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        conteudo = json.dumps(dados, ensure_ascii=False, indent=2).encode("utf-8")
+        file_metadata = {"name": nome_arquivo, "parents": [id_lider]}
+        media = MediaIoBaseUpload(io.BytesIO(conteudo), mimetype="application/json")
+        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
         return jsonify({"mensagem": f"JSON salvo como '{nome_arquivo}' com sucesso!"})
+
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
+
 
 @app.route("/gerar-relatorio-json", methods=["POST", "OPTIONS"])
 def gerar_relatorio_json():
