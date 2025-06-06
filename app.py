@@ -314,3 +314,10 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
             print(f"✅ PDF gerado e enviado com sucesso: {enviado['name']} | ID: {enviado['id']} | Pasta: {id_lider}")
         except Exception as e:
             print(f"❌ ERRO ao tentar salvar o PDF no Drive: {str(e)}")
+
+
+
+@app.route("/ver-arquetipos")
+def ver_arquetipos():
+    return jsonify(arquetipos_dominantes)
+
