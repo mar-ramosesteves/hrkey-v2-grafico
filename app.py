@@ -14,11 +14,14 @@ from matplotlib.backends.backend_pdf import PdfPages
 import tempfile
 import numpy as np
 import re
+import time
 
-# ✅ Carrega a matriz real e os arquétipos válidos diretamente da planilha
-matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
-arquetipos = matriz["ARQUETIPO"].unique().tolist()
+# ✅ Lista dos códigos das 49 perguntas
 perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
+
+# ✅ Carrega a matriz de cálculo com os arquétipos reais da planilha
+matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+arquetipos = sorted(matriz["ARQUETIPO"].unique())
 
 # 🔐 Autenticação Google Drive
 SCOPES = ['https://www.googleapis.com/auth/drive']
@@ -44,7 +47,6 @@ def aplicar_cors(response):
 def home():
     return "🔁 API V2 pronta para uso com leitura no Google Drive."
 
-# 🔧 Função auxiliar para garantir criação de pastas
 def garantir_pasta(nome, id_pai):
     resultado = service.files().list(
         q=f"'{id_pai}' in parents and name = '{nome}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
@@ -61,7 +63,6 @@ def garantir_pasta(nome, id_pai):
         nova_pasta = service.files().create(body=pasta_metadata, fields="id").execute()
         return nova_pasta["id"]
 
-# 📅 Salva relatório consolidado (JSON)
 @app.route("/salvar-json-consolidado", methods=["POST"])
 def salvar_json_consolidado():
     try:
@@ -87,119 +88,86 @@ def salvar_json_consolidado():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
-# 📤 Lê e junta autoavaliação + equipe
-@app.route("/gerar-relatorio-json", methods=["POST"])
-def gerar_relatorio_json():
-    try:
-        dados = request.get_json()
-        empresa = dados.get("empresa")
-        codrodada = dados.get("codrodada")
-        email_lider = dados.get("emailLider")
-
-        if not all([empresa, codrodada, email_lider]):
-            return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
-
-        def buscar_id_pasta(nome_pasta, id_pasta_mae):
-            query = f"'{id_pasta_mae}' in parents and name = '{nome_pasta}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-            resultados = service.files().list(q=query, fields="files(id, name)").execute()
-            arquivos = resultados.get('files', [])
-            return arquivos[0]['id'] if arquivos else None
-
-        empresa_id = buscar_id_pasta(empresa, PASTA_RAIZ)
-        rodada_id = buscar_id_pasta(codrodada, empresa_id)
-        lider_id = buscar_id_pasta(email_lider, rodada_id)
-
-        if not lider_id:
-            return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
-
-        query = f"'{lider_id}' in parents and mimeType='application/json' and trashed = false"
-        arquivos = service.files().list(q=query, fields="files(id, name)").execute().get('files', [])
-
-        auto = None
-        equipe = []
-
-        for arquivo in arquivos:
-            file_id = arquivo['id']
-            fh = io.BytesIO()
-            downloader = MediaIoBaseDownload(fh, service.files().get_media(fileId=file_id))
-            done = False
-            while not done:
-                status, done = downloader.next_chunk()
-            fh.seek(0)
-            conteudo = json.load(fh)
-            tipo = conteudo.get("tipo", "").lower()
-            if tipo.startswith("auto"):
-                auto = conteudo
-            else:
-                equipe.append(conteudo)
-
-        return jsonify({
-            "empresa": empresa,
-            "codrodada": codrodada,
-            "emailLider": email_lider,
-            "autoavaliacao": auto,
-            "avaliacoesEquipe": equipe
-        })
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
-
-# 📈 Gera gráfico principal PDF
-@app.route("/gerar-graficos-comparativos", methods=["POST"])
+@app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
 def gerar_graficos_comparativos():
+    if request.method == "OPTIONS":
+        response = jsonify({'status': 'CORS preflight OK'})
+        response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        return response
+
     try:
         dados = request.get_json()
         empresa = dados.get("empresa")
         codrodada = dados.get("codrodada")
         emailLider = dados.get("emailLider")
 
-        prefixo = f"relatorio_consolidado_{emailLider}"
         id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
         id_rodada = garantir_pasta(codrodada, id_empresa)
         id_lider = garantir_pasta(emailLider, id_rodada)
 
-        arquivos = service.files().list(q=f"'{id_lider}' in parents and name contains '{prefixo}' and trashed = false", fields="files(id, name, createdTime)").execute().get("files", [])
-        if not arquivos:
-            return jsonify({"erro": "Relatório consolidado não encontrado."}), 404
+        prefixo = f"relatorio_consolidado_{emailLider}"
+        arquivos_json = service.files().list(
+            q=f"'{id_lider}' in parents and name contains '{prefixo}' and trashed = false and mimeType='application/json'",
+            fields="files(id, name, createdTime)").execute().get("files", [])
 
-        arquivo_json = sorted(arquivos, key=lambda x: x["createdTime"], reverse=True)[0]
+        padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}.*\.json$", re.IGNORECASE)
+        arquivos_filtrados = [f for f in arquivos_json if padrao.match(f["name"])]
+
+        if not arquivos_filtrados:
+            return jsonify({"erro": "Arquivo de relatório consolidado não encontrado no Drive."}), 404
+
+        arquivo_alvo = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)[0]
+        file_id = arquivo_alvo["id"]
+
         fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, service.files().get_media(fileId=arquivo_json["id"]))
-        while True:
+        request_drive = service.files().get_media(fileId=file_id)
+        downloader = MediaIoBaseDownload(fh, request_drive)
+        done = False
+        while not done:
             status, done = downloader.next_chunk()
-            if done:
-                break
-        dados_json = json.loads(fh.getvalue().decode("utf-8"))
 
-        gerar_grafico_completo_com_titulo(dados_json, empresa, codrodada, emailLider)
+        json_data = json.loads(fh.getvalue().decode("utf-8"))
+
+        gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
+
         return jsonify({"mensagem": "✅ PDF gerado com sucesso e salvo no Drive."})
+
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
 def calcular_percentuais(respostas_dict):
-    total = {a: 0 for a in arquetipos}
-    maximos = {a: 0 for a in arquetipos}
+    total_por_arquetipo = {a: 0 for a in arquetipos}
+    max_por_arquetipo = {a: 0 for a in arquetipos}
     for cod in perguntas:
         try:
-            nota = int(round(float(respostas_dict.get(cod, 0))))
+            raw = respostas_dict.get(cod, 0)
+            nota = int(round(float(raw)))
             if nota < 1 or nota > 6:
                 continue
         except:
             continue
+
         for arq in arquetipos:
             chave = f"{arq}{nota}{cod}"
             linha = matriz[matriz["CHAVE"] == chave]
             if not linha.empty:
-                total[arq] += linha["PONTOS_OBTIDOS"].values[0]
-                maximos[arq] += linha["PONTOS_MAXIMOS"].values[0]
+                pontos = linha["PONTOS_OBTIDOS"].values[0]
+                maximo = linha["PONTOS_MAXIMOS"].values[0]
+                total_por_arquetipo[arq] += pontos
+                max_por_arquetipo[arq] += maximo
     return {
-        a: round((total[a] / maximos[a]) * 100, 1) if maximos[a] > 0 else 0 for a in arquetipos
+        a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
+        for a in arquetipos
     }
 
-def calcular_percentuais_equipes(lista):
-    total = {a: 0 for a in arquetipos}
-    maximos = {a: 0 for a in arquetipos}
-    for resp in lista:
-        respostas_dict = resp.get("respostas", {})
+def calcular_percentuais_equipes(lista_respostas):
+    acumulado_por_arq = {a: 0 for a in arquetipos}
+    maximo_por_arq = {a: 0 for a in arquetipos}
+
+    for resposta in lista_respostas:
+        respostas_dict = resposta.get("respostas", {})
         for cod in perguntas:
             try:
                 nota = int(respostas_dict.get(cod))
@@ -207,19 +175,27 @@ def calcular_percentuais_equipes(lista):
                     continue
             except:
                 continue
+
             for arq in arquetipos:
                 chave = f"{arq}{nota}{cod}"
                 linha = matriz[matriz["CHAVE"] == chave]
                 if not linha.empty:
-                    total[arq] += linha["PONTOS_OBTIDOS"].values[0]
-                    maximos[arq] += linha["PONTOS_MAXIMOS"].values[0]
+                    pontos = linha["PONTOS_OBTIDOS"].values[0]
+                    maximo = linha["PONTOS_MAXIMOS"].values[0]
+                    acumulado_por_arq[arq] += pontos
+                    maximo_por_arq[arq] += maximo
+
     return {
-        a: round((total[a] / maximos[a]) * 100, 1) if maximos[a] > 0 else 0 for a in arquetipos
+        a: round((acumulado_por_arq[a] / maximo_por_arq[a]) * 100, 1) if maximo_por_arq[a] > 0 else 0
+        for a in arquetipos
     }
 
 def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
-    pct_auto = calcular_percentuais(json_data.get("autoavaliacao", {}).get("respostas", {}))
-    pct_equipes = calcular_percentuais_equipes(json_data.get("avaliacoesEquipe", []))
+    respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
+    respostas_equipes = json_data.get("avaliacoesEquipe", [])
+
+    pct_auto = calcular_percentuais(respostas_auto)
+    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(arquetipos))
@@ -240,7 +216,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
     ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
     ax.set_ylabel("Pontuação (%)")
-    ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(json_data.get('avaliacoesEquipe', []))} respondentes", fontsize=12)
+    ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
     ax.legend()
     plt.tight_layout()
 
@@ -253,9 +229,14 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         id_lider = garantir_pasta(emailLider, id_rodada)
 
         nome_pdf = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
-        anteriores = service.files().list(q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false", fields="files(id)").execute()
+
+        anteriores = service.files().list(
+            q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
+            fields="files(id)").execute()
         for arq in anteriores.get("files", []):
             service.files().delete(fileId=arq["id"]).execute()
+
+        time.sleep(1)
 
         file_metadata = {"name": nome_pdf, "parents": [id_lider]}
         media = MediaFileUpload(tmp.name, mimetype="application/pdf", resumable=False)
