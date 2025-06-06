@@ -88,6 +88,77 @@ def salvar_json_consolidado():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+@app.route("/gerar-relatorio-json", methods=["POST", "OPTIONS"])
+def gerar_relatorio_json():
+    if request.method == "OPTIONS":
+        response = jsonify({'status': 'CORS preflight OK'})
+        response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        return response
+
+    try:
+        dados = request.get_json()
+        empresa = dados.get("empresa")
+        codrodada = dados.get("codrodada")
+        email_lider = dados.get("emailLider")
+
+        if not all([empresa, codrodada, email_lider]):
+            return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
+
+        def buscar_id_pasta(nome_pasta, id_pasta_mae):
+            query = f"'{id_pasta_mae}' in parents and name = '{nome_pasta}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            resultados = service.files().list(q=query, fields="files(id, name)").execute()
+            arquivos = resultados.get('files', [])
+            return arquivos[0]['id'] if arquivos else None
+
+        empresa_id = buscar_id_pasta(empresa, PASTA_RAIZ)
+        rodada_id = buscar_id_pasta(codrodada, empresa_id)
+        lider_id = buscar_id_pasta(email_lider, rodada_id)
+
+        if not lider_id:
+            return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
+
+        query = f"'{lider_id}' in parents and (mimeType = 'application/json' or mimeType = 'text/plain') and trashed = false"
+        arquivos = service.files().list(q=query, fields="files(id, name)").execute().get('files', [])
+
+        auto = None
+        equipe = []
+
+        for arquivo in arquivos:
+            nome = arquivo['name']
+            file_id = arquivo['id']
+            request_drive = service.files().get_media(fileId=file_id)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request_drive)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+
+            fh.seek(0)
+            conteudo = json.load(fh)
+            tipo = conteudo.get("tipo", "").lower()
+            if tipo.startswith("auto"):
+                auto = conteudo
+            else:
+                equipe.append(conteudo)
+
+        return jsonify({
+            "empresa": empresa,
+            "codrodada": codrodada,
+            "emailLider": email_lider,
+            "autoavaliacao": auto,
+            "avaliacoesEquipe": equipe,
+            "mensagem": "Relatório consolidado gerado com sucesso.",
+            "caminho": f"Avaliacoes RH / {empresa} / {codrodada} / {email_lider}"
+        })
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
+
+
 @app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
 def gerar_graficos_comparativos():
     if request.method == "OPTIONS":
