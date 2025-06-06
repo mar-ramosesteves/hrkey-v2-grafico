@@ -321,3 +321,105 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 def ver_arquetipos():
     return jsonify(arquetipos_dominantes)
 
+@app.route("/gerar-relatorio-analitico", methods=["POST"])
+def gerar_relatorio_analitico():
+    try:
+        dados = request.get_json()
+        empresa = dados.get("empresa")
+        codrodada = dados.get("codrodada")
+        emailLider = dados.get("emailLider")
+
+        if not all([empresa, codrodada, emailLider]):
+            return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
+
+        id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
+        id_rodada = garantir_pasta(codrodada, id_empresa)
+        id_lider = garantir_pasta(emailLider, id_rodada)
+
+        prefixo = f"relatorio_consolidado_{emailLider}"
+        arquivos_json = service.files().list(
+            q=f"'{id_lider}' in parents and name contains '{prefixo}' and trashed = false and mimeType='application/json'",
+            fields="files(id, name, createdTime)").execute().get("files", [])
+
+        padrao = re.compile(rf"^relatorio_consolidado_{re.escape(emailLider)}.*\\.json$", re.IGNORECASE)
+        arquivos_filtrados = [f for f in arquivos_json if padrao.match(f["name"])]
+
+        if not arquivos_filtrados:
+            return jsonify({"erro": "Relatório consolidado não encontrado."}), 404
+
+        arquivo_alvo = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)[0]
+        file_id = arquivo_alvo["id"]
+
+        fh = io.BytesIO()
+        request_drive = service.files().get_media(fileId=file_id)
+        downloader = MediaIoBaseDownload(fh, request_drive)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+
+        json_data = json.loads(fh.getvalue().decode("utf-8"))
+
+        with open("arquetipos_dominantes_por_questao.json", "r", encoding="utf-8") as f:
+            mapa_dom = json.load(f)
+
+        agrupado = {}
+        for cod, dupla in mapa_dom.items():
+            chave = " e ".join(sorted(dupla))
+            if chave not in agrupado:
+                agrupado[chave] = []
+            agrupado[chave].append(cod)
+
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import cm
+
+        nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
+        c = canvas.Canvas(tmp_path, pagesize=A4)
+        width, height = A4
+
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(2 * cm, height - 2 * cm, "Relatório Analítico por Arquétipos")
+        c.setFont("Helvetica", 10)
+        c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}")
+        c.drawString(2 * cm, height - 3.1 * cm, datetime.now().strftime("%d/%m/%Y %H:%M"))
+
+        y = height - 4 * cm
+        espaco = 2.2 * cm
+
+        matriz_df = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+
+        for grupo, codigos in agrupado.items():
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
+            y -= espaco / 2
+
+            for cod in codigos:
+                afirmacoes = matriz_df[matriz_df["CHAVE"].str.endswith(cod)]
+                if afirmacoes.empty:
+                    continue
+                linha = afirmacoes.iloc[0]
+                texto = linha.get("AFIRMACAO", "")
+                tendencia = linha.get("Tendência", "")
+                percentual = linha.get("% Tendência", "")
+
+                c.setFont("Helvetica", 10)
+                c.drawString(2 * cm, y, f"{cod}: {texto}")
+                y -= espaco / 2
+                c.drawString(2.5 * cm, y, f"Tendência: {tendencia} | %: {percentual}")
+                y -= espaco
+
+                if y < 4 * cm:
+                    c.showPage()
+                    y = height - 4 * cm
+
+        c.save()
+
+        file_metadata = {"name": nome_pdf, "parents": [id_lider]}
+        media = MediaFileUpload(tmp_path, mimetype="application/pdf", resumable=False)
+        enviado = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+
+        return jsonify({"mensagem": "✅ Relatório analítico gerado e salvo com sucesso."})
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
