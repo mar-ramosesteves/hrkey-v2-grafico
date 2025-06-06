@@ -131,6 +131,15 @@ def gerar_relatorio_json():
         if not lider_id:
             return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
 
+        # 🧹 Remove relatórios consolidados antigos antes de ler os arquivos
+        antigos = service.files().list(
+            q=f"'{lider_id}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType = 'application/json'",
+            fields="files(id)").execute().get("files", [])
+
+        for arq in antigos:
+            service.files().delete(fileId=arq["id"]).execute()
+
+        # 🔍 Lê os arquivos de auto e equipe
         query = f"'{lider_id}' in parents and (mimeType = 'application/json' or mimeType = 'text/plain') and trashed = false"
         arquivos = service.files().list(q=query, fields="files(id, name)").execute().get('files', [])
 
@@ -155,7 +164,7 @@ def gerar_relatorio_json():
             else:
                 equipe.append(conteudo)
 
-        return jsonify({
+        relatorio_final = {
             "empresa": empresa,
             "codrodada": codrodada,
             "emailLider": email_lider,
@@ -163,7 +172,16 @@ def gerar_relatorio_json():
             "avaliacoesEquipe": equipe,
             "mensagem": "Relatório consolidado gerado com sucesso.",
             "caminho": f"Avaliacoes RH / {empresa} / {codrodada} / {email_lider}"
-        })
+        }
+
+        # 💾 Salva o novo JSON consolidado
+        nome_arquivo = f"relatorio_consolidado_{email_lider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        conteudo = json.dumps(relatorio_final, ensure_ascii=False, indent=2).encode("utf-8")
+        file_metadata = {"name": nome_arquivo, "parents": [lider_id]}
+        media = MediaIoBaseUpload(io.BytesIO(conteudo), mimetype="application/json")
+        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+
+        return jsonify(relatorio_final)
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
