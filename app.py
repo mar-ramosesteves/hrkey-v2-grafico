@@ -182,14 +182,13 @@ def gerar_graficos_comparativos():
         id_lider = garantir_pasta(emailLider, id_rodada)
 
         arquivos_json = service.files().list(
-    q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
-    fields="files(id, name, createdTime)").execute().get("files", [])
+            q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
+            fields="files(id, name, createdTime)").execute().get("files", [])
 
-# Filtra apenas os arquivos relacionados ao líder e à rodada informada
-arquivos_filtrados = [
-    f for f in arquivos_json
-    if emailLider.lower() in f["name"].lower() and codrodada.lower() in f["name"].lower()
-]
+        arquivos_filtrados = [
+            f for f in arquivos_json
+            if emailLider.lower() in f["name"].lower() and codrodada.lower() in f["name"].lower()
+        ]
 
         if not arquivos_filtrados:
             return jsonify({"erro": "Arquivo de relatório consolidado não encontrado no Drive."}), 404
