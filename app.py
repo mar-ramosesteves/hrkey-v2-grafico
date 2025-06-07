@@ -18,6 +18,9 @@ import time
 
 import json
 
+from math import pi
+
+
 # Carrega o dicionário de arquétipos dominantes por questão
 with open("arquetipos_dominantes_por_questao.json", encoding="utf-8") as f:
     arquetipos_dominantes = json.load(f)
