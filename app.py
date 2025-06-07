@@ -360,99 +360,132 @@ def gerar_relatorio_analitico():
             status, done = downloader.next_chunk()
 
         json_data = json.loads(fh.getvalue().decode("utf-8"))
-        auto = json_data.get("autoavaliacao", {}).get("respostas", {})
-        equipe = json_data.get("avaliacoesEquipe", [])
+        respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
+        respostas_equipes = json_data.get("avaliacoesEquipe", [])
 
         with open("arquetipos_dominantes_por_questao.json", "r", encoding="utf-8") as f:
             mapa_dom = json.load(f)
 
         matriz_df = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
 
-        resultados = {}
-        for i in range(1, 50):
-            cod = f"Q{str(i).zfill(2)}"
-            arquetipos_dom = mapa_dom.get(cod, [])
-            if not arquetipos_dom:
-                continue
-            arq_base = arquetipos_dom[0]  # Pode usar qualquer um
+        def obter_dados_por_cod(respostas_dicts):
+            somas = {}
+            contagens = {}
+            for r in respostas_dicts:
+                respostas = r.get("respostas", {})
+                for cod, valor in respostas.items():
+                    try:
+                        val = float(valor)
+                        somas[cod] = somas.get(cod, 0) + val
+                        contagens[cod] = contagens.get(cod, 0) + 1
+                    except:
+                        pass
+            medias = {cod: round(somas[cod] / contagens[cod]) for cod in somas if contagens[cod] > 0}
+            return medias
 
-            nota_auto = int(round(float(auto.get(cod, 0))))
-            chave_auto = f"{arq_base}{nota_auto}{cod}"
-            linha_auto = matriz_df[matriz_df["CHAVE"] == chave_auto]
-            if linha_auto.empty:
-                continue
+        media_equipes = obter_dados_por_cod(respostas_equipes)
+        auto_ajustada = {cod: round(float(respostas_auto.get(cod, 0))) for cod in perguntas if cod in respostas_auto}
 
-            tendencia_auto = linha_auto.iloc[0]["Tendência"]
-            pct_auto = linha_auto.iloc[0]["% Tendência"]
-
-            notas_equipe = []
-            for resposta in equipe:
-                try:
-                    nota = float(resposta.get("respostas", {}).get(cod, 0))
-                    if 1 <= nota <= 6:
-                        notas_equipe.append(nota)
-                except:
-                    continue
-
-            if notas_equipe:
-                media_eq = int(round(sum(notas_equipe) / len(notas_equipe)))
-                chave_eq = f"{arq_base}{media_eq}{cod}"
-                linha_eq = matriz_df[matriz_df["CHAVE"] == chave_eq]
-                if not linha_eq.empty:
-                    tendencia_eq = linha_eq.iloc[0]["Tendência"]
-                    pct_eq = linha_eq.iloc[0]["% Tendência"]
-                else:
-                    tendencia_eq = "-"
-                    pct_eq = 0
-            else:
-                tendencia_eq = "-"
-                pct_eq = 0
-
-            resultados[cod] = {
-                "afirmacao": linha_auto.iloc[0]["AFIRMACAO"],
-                "auto": {"pct": pct_auto, "tendencia": tendencia_auto},
-                "equipe": {"pct": pct_eq, "tendencia": tendencia_eq}
-            }
+        agrupado = {}
+        for cod, dupla in mapa_dom.items():
+            chave = " e ".join(sorted(dupla))
+            if chave not in agrupado:
+                agrupado[chave] = []
+            agrupado[chave].append(cod)
 
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
         from reportlab.lib.units import cm
+        from matplotlib import pyplot as plt
+        import matplotlib.patches as patches
+
+        def criar_velocimetro(valor, cor, titulo):
+            fig, ax = plt.subplots(figsize=(2, 1.2), subplot_kw={'projection': 'polar'})
+            ax.set_theta_offset(np.pi) 
+            ax.set_theta_direction(-1)
+            ax.set_yticklabels([])
+            ax.set_xticklabels([])
+            ax.set_ylim(0, 100)
+            ax.barh(0, np.pi, height=100, color="lightgrey")
+            theta = (valor / 100) * np.pi
+            ax.barh(0, theta, height=100, color=cor)
+            ax.text(0, -10, f"{valor:.1f}%", fontsize=10, ha='center')
+            ax.set_title(titulo, fontsize=9)
+            plt.tight_layout()
+            tmp_img = io.BytesIO()
+            plt.savefig(tmp_img, format="png", bbox_inches="tight", dpi=150)
+            plt.close(fig)
+            tmp_img.seek(0)
+            return tmp_img
 
         nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
         c = canvas.Canvas(tmp_path, pagesize=A4)
         width, height = A4
+        y = height - 2 * cm
 
         c.setFont("Helvetica-Bold", 14)
-        c.drawString(2 * cm, height - 2 * cm, "Relatório Analítico por Arquétipos")
+        c.drawString(2 * cm, y, "Relatório Analítico por Arquétipos")
+        y -= 1 * cm
         c.setFont("Helvetica", 10)
-        c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}")
-        c.drawString(2 * cm, height - 3.1 * cm, datetime.now().strftime("%d/%m/%Y %H:%M"))
+        c.drawString(2 * cm, y, f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}")
+        y -= 1 * cm
+        c.drawString(2 * cm, y, datetime.now().strftime("%d/%m/%Y %H:%M"))
+        y -= 1.5 * cm
 
-        y = height - 4 * cm
-        for cod in sorted(resultados):
-            bloco = resultados[cod]
-            c.setFont("Helvetica-Bold", 11)
-            c.drawString(2 * cm, y, f"{cod}: {bloco['afirmacao']}")
-            y -= 0.6 * cm
+        for grupo, codigos in agrupado.items():
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
+            y -= 0.8 * cm
 
-            c.setFont("Helvetica", 10)
-            c.drawString(2.2 * cm, y, f"Autoavaliação: {bloco['auto']['pct']}% | Tendência: {bloco['auto']['tendencia']}")
-            y -= 0.5 * cm
-            c.drawString(2.2 * cm, y, f"Equipe: {bloco['equipe']['pct']}% | Tendência: {bloco['equipe']['tendencia']}")
-            y -= 1.2 * cm
+            for cod in codigos:
+                linha = matriz_df[matriz_df["CHAVE"].str.endswith(str(cod))].iloc[0]
+                afirmacao = linha["AFIRMACAO"]
+                tendencia_auto = linha["Tendência"]
+                pct_auto = linha["% Tendência"]
 
-            if y < 4 * cm:
-                c.showPage()
-                y = height - 4 * cm
+                auto_nota = auto_ajustada.get(cod, 0)
+                equipe_nota = media_equipes.get(cod, 0)
+
+                chave_auto = f"{auto_nota}{cod}"
+                chave_equipe = f"{equipe_nota}{cod}"
+
+                linha_auto = matriz_df[matriz_df["CHAVE"].str.endswith(chave_auto)]
+                linha_equipe = matriz_df[matriz_df["CHAVE"].str.endswith(chave_equipe)]
+
+                t_auto = linha_auto["Tendência"].values[0] if not linha_auto.empty else "-"
+                p_auto = linha_auto["% Tendência"].values[0] if not linha_auto.empty else "-"
+                t_eq = linha_equipe["Tendência"].values[0] if not linha_equipe.empty else "-"
+                p_eq = linha_equipe["% Tendência"].values[0] if not linha_equipe.empty else "-"
+
+                c.setFont("Helvetica", 10)
+                c.drawString(2 * cm, y, f"{cod}: {afirmacao[:110]}")
+                y -= 1 * cm
+
+                img_auto = criar_velocimetro(float(p_auto), "royalblue", "Autoavaliação")
+                img_eq = criar_velocimetro(float(p_eq), "darkorange", "Média da Equipe")
+
+                c.drawInlineImage(img_auto, 2 * cm, y - 3.2 * cm, width=5 * cm, height=2.5 * cm)
+                c.drawInlineImage(img_eq, 8 * cm, y - 3.2 * cm, width=5 * cm, height=2.5 * cm)
+
+                y -= 3.4 * cm
+
+                c.setFont("Helvetica", 8)
+                c.drawString(2 * cm, y, f"Tendência Auto: {t_auto} | %: {p_auto}")
+                c.drawString(8 * cm, y, f"Tendência Equipe: {t_eq} | %: {p_eq}")
+                y -= 1 * cm
+
+                if y < 5 * cm:
+                    c.showPage()
+                    y = height - 2 * cm
 
         c.save()
 
         file_metadata = {"name": nome_pdf, "parents": [id_lider]}
         media = MediaFileUpload(tmp_path, mimetype="application/pdf", resumable=False)
-        enviado = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
-        return jsonify({"mensagem": "✅ Relatório analítico gerado e salvo com sucesso."})
+        return jsonify({"mensagem": "✅ Relatório analítico com gráficos gerado com sucesso."})
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
