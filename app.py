@@ -328,6 +328,14 @@ def ver_arquetipos():
 @app.route("/gerar-relatorio-analitico", methods=["POST"])
 def gerar_relatorio_analitico():
     try:
+        import gc
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import cm
+        from PIL import Image
+        from matplotlib import pyplot as plt
+        import numpy as np
+
         dados = request.get_json()
         empresa = dados.get("empresa")
         codrodada = dados.get("codrodada")
@@ -374,18 +382,12 @@ def gerar_relatorio_analitico():
                 agrupado[chave] = []
             agrupado[chave].append(cod)
 
-        from reportlab.lib.pagesizes import A4
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.units import cm
-        from PIL import Image
-
         def criar_velocimetro(valor, cor, titulo):
             fig, ax = plt.subplots(figsize=(2, 1.2), subplot_kw={'projection': 'polar'})
             ax.set_theta_offset(np.pi)
             ax.set_theta_direction(-1)
             ax.set_yticklabels([])
-            ax.set_xticks(np.linspace(0, np.pi, 11))
-            ax.set_xticklabels([f"{int(t*100/pi)}%" for t in np.linspace(0, np.pi, 11)])
+            ax.set_xticklabels([])
             ax.set_ylim(0, 100)
             ax.barh(0, np.pi, height=100, color="lightgrey")
             theta = (valor / 100) * np.pi
@@ -394,10 +396,13 @@ def gerar_relatorio_analitico():
             ax.set_title(titulo, fontsize=9)
             plt.tight_layout()
             tmp_img = io.BytesIO()
-            plt.savefig(tmp_img, format="png", bbox_inches="tight", dpi=150)
+            plt.savefig(tmp_img, format="png", bbox_inches="tight", dpi=100)
             plt.close(fig)
             tmp_img.seek(0)
-            return Image.open(tmp_img)
+            imagem = Image.open(tmp_img).copy()
+            tmp_img.close()
+            gc.collect()
+            return imagem
 
         nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
@@ -433,13 +438,17 @@ def gerar_relatorio_analitico():
                 c.drawString(2 * cm, y, f"{cod}: {texto}")
                 y -= espaco / 2
                 c.drawString(2.5 * cm, y, f"Tendência: {tendencia} | %: {percentual}")
-                y -= espaco
+                y -= espaco / 2
 
-                velocimetro = criar_velocimetro(float(percentual), "royalblue", "% Tendência")
-                img_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
-                velocimetro.save(img_path)
-                c.drawInlineImage(img_path, 12 * cm, y, width=4 * cm, height=2 * cm)
-                y -= 2.5 * cm
+                try:
+                    valor = float(str(percentual).replace("%", "").replace(",", "."))
+                    velocimetro = criar_velocimetro(valor, "royalblue", "% Tendência")
+                    img_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+                    velocimetro.save(img_path)
+                    c.drawInlineImage(img_path, 12 * cm, y, width=4 * cm, height=2 * cm)
+                    y -= 2.5 * cm
+                except:
+                    pass
 
                 if y < 4 * cm:
                     c.showPage()
