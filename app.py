@@ -359,36 +359,60 @@ def gerar_relatorio_analitico():
         while not done:
             status, done = downloader.next_chunk()
 
-        relatorio = json.loads(fh.getvalue().decode("utf-8"))
-        auto = relatorio.get("autoavaliacao", {})
-        equipes = relatorio.get("avaliacoesEquipe", [])
+        json_data = json.loads(fh.getvalue().decode("utf-8"))
+        auto = json_data.get("autoavaliacao", {}).get("respostas", {})
+        equipe = json_data.get("avaliacoesEquipe", [])
 
-        respostas_auto = auto.get("respostas", {})
-        respostas_equipes = [r.get("respostas", {}) for r in equipes if r.get("respostas")]
-
-        with open("arquetipos_dominantes_por_questao.json", encoding="utf-8") as f:
+        with open("arquetipos_dominantes_por_questao.json", "r", encoding="utf-8") as f:
             mapa_dom = json.load(f)
 
         matriz_df = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
 
-        def extrair_valor(matriz_df, cod, nota):
-            try:
-                nota = int(round(float(nota)))
-                if nota < 1 or nota > 6:
-                    return None
-            except:
-                return None
+        resultados = {}
+        for i in range(1, 50):
+            cod = f"Q{str(i).zfill(2)}"
+            arquetipos_dom = mapa_dom.get(cod, [])
+            if not arquetipos_dom:
+                continue
+            arq_base = arquetipos_dom[0]  # Pode usar qualquer um
 
-            for arq in arquetipos:
-                chave = f"{arq}{nota}{cod}"
-                linha = matriz_df[matriz_df["CHAVE"] == chave]
-                if not linha.empty:
-                    return {
-                        "tendencia": linha["Tendência"].values[0],
-                        "percentual": linha["% Tendência"].values[0],
-                        "afirmacao": linha["AFIRMACAO"].values[0]
-                    }
-            return None
+            nota_auto = int(round(float(auto.get(cod, 0))))
+            chave_auto = f"{arq_base}{nota_auto}{cod}"
+            linha_auto = matriz_df[matriz_df["CHAVE"] == chave_auto]
+            if linha_auto.empty:
+                continue
+
+            tendencia_auto = linha_auto.iloc[0]["Tendência"]
+            pct_auto = linha_auto.iloc[0]["% Tendência"]
+
+            notas_equipe = []
+            for resposta in equipe:
+                try:
+                    nota = float(resposta.get("respostas", {}).get(cod, 0))
+                    if 1 <= nota <= 6:
+                        notas_equipe.append(nota)
+                except:
+                    continue
+
+            if notas_equipe:
+                media_eq = int(round(sum(notas_equipe) / len(notas_equipe)))
+                chave_eq = f"{arq_base}{media_eq}{cod}"
+                linha_eq = matriz_df[matriz_df["CHAVE"] == chave_eq]
+                if not linha_eq.empty:
+                    tendencia_eq = linha_eq.iloc[0]["Tendência"]
+                    pct_eq = linha_eq.iloc[0]["% Tendência"]
+                else:
+                    tendencia_eq = "-"
+                    pct_eq = 0
+            else:
+                tendencia_eq = "-"
+                pct_eq = 0
+
+            resultados[cod] = {
+                "afirmacao": linha_auto.iloc[0]["AFIRMACAO"],
+                "auto": {"pct": pct_auto, "tendencia": tendencia_auto},
+                "equipe": {"pct": pct_eq, "tendencia": tendencia_eq}
+            }
 
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
@@ -406,52 +430,21 @@ def gerar_relatorio_analitico():
         c.drawString(2 * cm, height - 3.1 * cm, datetime.now().strftime("%d/%m/%Y %H:%M"))
 
         y = height - 4 * cm
-        espacamento = 2.2 * cm
+        for cod in sorted(resultados):
+            bloco = resultados[cod]
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(2 * cm, y, f"{cod}: {bloco['afirmacao']}")
+            y -= 0.6 * cm
 
-        agrupado = {}
-        for cod, dupla in mapa_dom.items():
-            chave = " e ".join(sorted(dupla))
-            if chave not in agrupado:
-                agrupado[chave] = []
-            agrupado[chave].append(cod)
+            c.setFont("Helvetica", 10)
+            c.drawString(2.2 * cm, y, f"Autoavaliação: {bloco['auto']['pct']}% | Tendência: {bloco['auto']['tendencia']}")
+            y -= 0.5 * cm
+            c.drawString(2.2 * cm, y, f"Equipe: {bloco['equipe']['pct']}% | Tendência: {bloco['equipe']['tendencia']}")
+            y -= 1.2 * cm
 
-        for grupo, codigos in agrupado.items():
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
-            y -= espacamento / 2
-
-            for cod in codigos:
-                info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
-                medias_equipes = []
-                for r in respostas_equipes:
-                    val = extrair_valor(matriz_df, cod, r.get(cod))
-                    if val:
-                        medias_equipes.append(val)
-
-                if not info_auto and not medias_equipes:
-                    continue
-
-                tendencia_auto = info_auto["tendencia"] if info_auto else "-"
-                percentual_auto = info_auto["percentual"] if info_auto else "-"
-                texto = info_auto["afirmacao"] if info_auto else cod
-
-                tendencia_eq = "-"
-                percentual_eq = "-"
-                if medias_equipes:
-                    tendencia_eq = medias_equipes[0]["tendencia"]
-                    percentual_eq = medias_equipes[0]["percentual"]
-
-                c.setFont("Helvetica", 10)
-                c.drawString(2 * cm, y, f"{cod}: {texto}")
-                y -= espacamento / 2
-                c.drawString(2.5 * cm, y, f"Autoavaliação → Tendência: {tendencia_auto} | %: {percentual_auto}")
-                y -= espacamento / 2
-                c.drawString(2.5 * cm, y, f"Média Equipe → Tendência: {tendencia_eq} | %: {percentual_eq}")
-                y -= espacamento
-
-                if y < 4 * cm:
-                    c.showPage()
-                    y = height - 4 * cm
+            if y < 4 * cm:
+                c.showPage()
+                y = height - 4 * cm
 
         c.save()
 
