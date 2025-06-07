@@ -381,7 +381,8 @@ def gerar_relatorio_analitico():
             ax.set_theta_offset(np.pi)
             ax.set_theta_direction(-1)
             ax.set_yticklabels([])
-            ax.set_xticklabels([])
+            ax.set_xticks(np.linspace(0, np.pi, 11))
+            ax.set_xticklabels([f"{int(t*100/pi)}%" for t in np.linspace(0, np.pi, 11)])
             ax.set_ylim(0, 100)
             ax.barh(0, np.pi, height=100, color="lightgrey")
             theta = (valor / 100) * np.pi
