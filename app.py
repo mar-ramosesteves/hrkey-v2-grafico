@@ -325,6 +325,8 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 def ver_arquetipos():
     return jsonify(arquetipos_dominantes)
 
+from textwrap import wrap
+
 @app.route("/gerar-relatorio-analitico", methods=["POST"])
 def gerar_relatorio_analitico():
     try:
@@ -466,14 +468,23 @@ def gerar_relatorio_analitico():
                 percentual_eq = info_eq["percentual"] if info_eq else 0
 
                 c.setFont("Helvetica", 10)
-                c.drawString(2 * cm, y, f"{cod}: {texto}")
-                y -= espacamento / 2
+
+                texto_afirmacao = f"{cod}: {texto}"
+                linhas_afirmacao = wrap(texto_afirmacao, width=100)
+                textobj = c.beginText()
+                textobj.setTextOrigin(2 * cm, y)
+                textobj.setFont("Helvetica", 10)
+                for linha in linhas_afirmacao:
+                    textobj.textLine(linha)
+                c.drawText(textobj)
+                y -= espacamento / 2 + (len(linhas_afirmacao) - 1) * 0.5 * cm
+
                 c.drawString(2.5 * cm, y, f"Autoavaliação → Tendência: {tendencia_auto} | %: {percentual_auto}%")
                 y -= 0.6 * cm
                 desenhar_barra(c, 2.5 * cm, y, percentual_auto, tendencia_auto)
                 y -= espacamento / 2
-                c.setFont("Helvetica", 10)
 
+                c.setFont("Helvetica", 10)
                 c.drawString(2.5 * cm, y, f"Média Equipe → Tendência: {tendencia_eq} | %: {percentual_eq}%")
                 y -= 0.6 * cm
                 desenhar_barra(c, 2.5 * cm, y, percentual_eq, tendencia_eq)
