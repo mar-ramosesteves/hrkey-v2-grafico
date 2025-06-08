@@ -386,10 +386,11 @@ def gerar_relatorio_analitico():
                 chave = f"{arq}{nota}{cod}"
                 linha = matriz_df[matriz_df["CHAVE"] == chave]
                 if not linha.empty:
+                    percentual = round(float(linha['% Tendência'].values[0]) * 100, 1)
                     return {
-                        "tendencia": linha["Tendência"].values[0],
-                        "percentual": f"{round(float(linha["% Tendência"].values[0]) * 100, 1)}%",
-                        "afirmacao": linha["AFIRMACAO"].values[0]
+                        "tendencia": linha['Tendência'].values[0],
+                        "percentual": f"{percentual}%",
+                        "afirmacao": linha['AFIRMACAO'].values[0]
                     }
             return None
 
