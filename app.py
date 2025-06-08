@@ -338,7 +338,7 @@ def gerar_relatorio_analitico():
 
         id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
         id_rodada = garantir_pasta(codrodada, id_empresa)
-        id_lider = garantir_pasta(emailLider, id_rodado)
+        id_lider = garantir_pasta(emailLider, id_rodada)
 
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
