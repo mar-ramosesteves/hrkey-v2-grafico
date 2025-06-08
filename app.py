@@ -406,7 +406,10 @@ def gerar_relatorio_analitico():
         width, height = A4
 
         c.setFont("Helvetica-Bold", 30)
-        c.drawString(2 * cm, height - 2 * cm, "Relatório Analítico por Arquétipos")
+        titulo = "Relatório Analítico por Arquétipos"
+        c.drawCentredString(width / 2, height / 2, titulo)
+        c.showPage()  # Avança para a próxima página depois do título
+        
         c.setFont("Helvetica", 10)
         c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}")
         c.drawString(2 * cm, height - 3.1 * cm, datetime.now().strftime("%d/%m/%Y %H:%M"))
