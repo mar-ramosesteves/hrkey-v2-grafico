@@ -335,7 +335,6 @@ def gerar_relatorio_analitico():
         return response
 
     try:
-        # Importações locais (evita falhas de deploy se algo estiver ausente)
         import gc
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
@@ -351,12 +350,10 @@ def gerar_relatorio_analitico():
         if not all([empresa, codrodada, emailLider]):
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
-        # Garantir pastas no Drive
         id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
         id_rodada = garantir_pasta(codrodada, id_empresa)
         id_lider = garantir_pasta(emailLider, id_rodada)
 
-        # Buscar JSON consolidado
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
             fields="files(id, name, createdTime)").execute().get("files", [])
@@ -378,12 +375,47 @@ def gerar_relatorio_analitico():
         done = False
         while not done:
             status, done = downloader.next_chunk()
+
         json_data = json.loads(fh.getvalue().decode("utf-8"))
 
-        # Aqui viria a geração do PDF, você já tem isso na parte final do seu código.
-        # Apenas garanta que ele esteja dentro desse bloco `try:`.
+        # 🔧 Geração do PDF (exemplo simples)
+        nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
+        c = canvas.Canvas(tmp_path, pagesize=A4)
+        width, height = A4
 
-        return jsonify({"mensagem": "✅ Relatório analítico gerado e salvo com sucesso."})
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(2 * cm, height - 2 * cm, "Relatório Analítico por Arquétipos")
+        c.setFont("Helvetica", 10)
+        c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa}")
+        c.drawString(2 * cm, height - 3.1 * cm, f"Líder: {emailLider} | Rodada: {codrodada}")
+        c.drawString(2 * cm, height - 3.6 * cm, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+        c.showPage()
+        c.save()
+
+        # 💾 Upload no Drive com verificação
+        try:
+            file_metadata = {"name": nome_pdf, "parents": [id_lider]}
+            media = MediaFileUpload(tmp_path, mimetype="application/pdf", resumable=False)
+
+            enviado = service.files().create(
+                body=file_metadata, media_body=media, fields="id, name, parents"
+            ).execute()
+
+            print("📂 RELATÓRIO SALVO NO DRIVE:")
+            print("📝 Nome:", enviado['name'])
+            print("📁 Pasta destino ID:", enviado['parents'][0])
+            print("🔗 Link direto:", f"https://drive.google.com/file/d/{enviado['id']}/view")
+
+            return jsonify({
+                "mensagem": "✅ Relatório analítico gerado e salvo com sucesso.",
+                "arquivo": enviado['name'],
+                "link": f"https://drive.google.com/file/d/{enviado['id']}/view"
+            })
+
+        except Exception as e:
+            print("❌ ERRO AO ENVIAR PARA O DRIVE:", str(e))
+            return jsonify({"erro": "Erro ao salvar no Drive", "detalhe": str(e)}), 500
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
