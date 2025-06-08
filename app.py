@@ -341,8 +341,8 @@ def gerar_relatorio_analitico():
         from reportlab.lib.units import cm
         from PIL import Image
         import numpy as np
+        from matplotlib.backends.backend_pdf import PdfPages
         import matplotlib.pyplot as plt
-        import tempfile
 
         dados = request.get_json()
         empresa = dados.get("empresa")
@@ -352,10 +352,12 @@ def gerar_relatorio_analitico():
         if not all([empresa, codrodada, emailLider]):
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
+        # Garantir pastas no Drive
         id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
         id_rodada = garantir_pasta(codrodada, id_empresa)
         id_lider = garantir_pasta(emailLider, id_rodada)
 
+        # Buscar JSON consolidado
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
             fields="files(id, name, createdTime)").execute().get("files", [])
@@ -379,142 +381,75 @@ def gerar_relatorio_analitico():
             status, done = downloader.next_chunk()
         json_data = json.loads(fh.getvalue().decode("utf-8"))
 
-        respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
-        respostas_equipes = json_data.get("avaliacoesEquipe", [])
+        # Adicionar data de execução ao JSON
+        from datetime import datetime
+        json_data["data_execucao"] = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        def calcular_percentuais(respostas_dict):
-            total_por_arquetipo = {a: 0 for a in arquetipos}
-            max_por_arquetipo = {a: 0 for a in arquetipos}
-            for cod in perguntas:
-                try:
-                    raw = respostas_dict.get(cod, 0)
-                    nota = int(round(float(raw)))
-                    if nota < 1 or nota > 6:
-                        continue
-                except:
-                    continue
-                for arq in arquetipos:
-                    chave = f"{arq}{nota}{cod}"
-                    linha = matriz[matriz["CHAVE"] == chave]
-                    if not linha.empty:
-                        pontos = linha["PONTOS_OBTIDOS"].values[0]
-                        maximo = linha["PONTOS_MAXIMOS"].values[0]
-                        total_por_arquetipo[arq] += pontos
-                        max_por_arquetipo[arq] += maximo
-            return {
-                a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
-                for a in arquetipos
-            }
+        # Geração do PDF completo com gráficos
+        def gerar_pdf_analitico_completo(json_data):
+            arquetipos = ['Visionário', 'Conector', 'Executor', 'Protetor', 'Condutor', 'Mentor']
+            auto_por_arquetipo = json_data.get("auto_por_arquetipo", {})
+            equipe_por_arquetipo = json_data.get("equipe_por_arquetipo", {})
+            auto_por_questao = json_data.get("auto_por_questao", {})
+            equipe_por_questao = json_data.get("equipe_por_questao", {})
 
-        def calcular_percentuais_equipes(lista_respostas):
-            totais_por_arquetipo = {a: 0 for a in arquetipos}
-            total_avaliacoes = 0
-            for resposta in lista_respostas:
-                respostas_dict = resposta.get("respostas", {})
-                if not respostas_dict:
-                    continue
-                percentuais = calcular_percentuais(respostas_dict)
-                for arq in arquetipos:
-                    totais_por_arquetipo[arq] += percentuais.get(arq, 0)
-                total_avaliacoes += 1
-            if total_avaliacoes == 0:
-                return {a: 0 for a in arquetipos}
-            return {
-                a: round(totais_por_arquetipo[a] / total_avaliacoes, 1)
-                for a in arquetipos
-            }
+            pdf_buffer = io.BytesIO()
+            with PdfPages(pdf_buffer) as pdf:
+                # Gráfico principal
+                fig, ax = plt.subplots(figsize=(10, 6))
+                x = np.arange(len(arquetipos))
+                auto_vals = [auto_por_arquetipo.get(a, 0) for a in arquetipos]
+                equipe_vals = [equipe_por_arquetipo.get(a, 0) for a in arquetipos]
 
-        def criar_velocimetro_horizontal(valor, cor):
-            fig, ax = plt.subplots(figsize=(6, 0.6))
-            ax.barh(0, valor, color=cor, height=0.125)
-            ax.set_xlim(0, 100)
-            ax.set_xticks(np.arange(0, 110, 10))
-            ax.set_xticklabels([f"{i}%" for i in range(0, 110, 10)])
-            ax.set_yticks([])
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-            ax.spines["left"].set_visible(False)
-            ax.spines["bottom"].set_color("#999999")
-            for spine in ax.spines.values():
-                spine.set_linewidth(0.5)
-            fig.tight_layout()
-            img_buf = io.BytesIO()
-            plt.savefig(img_buf, format="png", bbox_inches="tight", dpi=100)
-            plt.close(fig)
-            img_buf.seek(0)
-            return Image.open(img_buf).copy()
+                ax.bar(x - 0.2, auto_vals, width=0.4, label="Auto", alpha=0.7)
+                ax.bar(x + 0.2, equipe_vals, width=0.4, label="Equipe", alpha=0.7)
+                ax.axhline(50, color="gray", linestyle="--", linewidth=1)
+                ax.axhline(60, color="gray", linestyle="--", linewidth=1)
+                ax.set_xticks(x)
+                ax.set_xticklabels(arquetipos)
+                ax.set_ylabel("%")
+                ax.set_title("Comparativo por Arquétipo")
+                ax.legend()
+                pdf.savefig(fig)
+                plt.close()
 
-        nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
-        c = canvas.Canvas(tmp_path, pagesize=A4)
-        width, height = A4
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(2 * cm, height - 2 * cm, "Relatório Analítico por Arquétipos")
-        c.setFont("Helvetica", 10)
-        c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa}")
-        c.drawString(2 * cm, height - 3.1 * cm, f"Líder: {emailLider} | Rodada: {codrodada}")
-        c.drawString(2 * cm, height - 3.6 * cm, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-        c.showPage()
+                # 98 gráficos por questão
+                for i in range(1, 50):
+                    cod = f"Q{str(i).zfill(2)}"
+                    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8.5, 4))
+                    val_auto = auto_por_questao.get(cod, 0)
+                    val_equipe = equipe_por_questao.get(cod, 0)
+                    for ax, val, titulo in zip((ax1, ax2), (val_auto, val_equipe), ("Auto", "Equipe")):
+                        ax.barh([0], [val], height=0.125, color='blue')
+                        ax.set_xlim(0, 100)
+                        ax.set_yticks([])
+                        ax.set_xticks(np.arange(0, 101, 10))
+                        ax.set_xticklabels([f"{x}%" for x in range(0, 101, 10)])
+                        ax.set_title(f"{titulo} - {cod}")
+                    plt.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close()
 
-        perguntas_formatadas = perguntas
-        y = height - 2 * cm
-        for i, cod in enumerate(perguntas_formatadas):
-            resp_auto = respostas_auto.get(cod)
-            media_eq = np.mean([
-                float(r.get("respostas", {}).get(cod, 0))
-                for r in respostas_equipes if r.get("respostas", {}).get(cod)
-            ]) if respostas_equipes else 0
+            pdf_buffer.seek(0)
+            nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{json_data.get('empresa','')}_{json_data.get('emailLider','')}_{json_data.get('codrodada','')}_{json_data.get('data_execucao','')}.pdf"
+            return {"pdf": pdf_buffer, "nome_arquivo": nome_pdf}
 
-            vel1 = criar_velocimetro_horizontal(float(resp_auto) * 16.67, "royalblue") if resp_auto else criar_velocimetro_horizontal(0, "lightgrey")
-            vel2 = criar_velocimetro_horizontal(media_eq * 16.67, "darkorange") if media_eq else criar_velocimetro_horizontal(0, "lightgrey")
+        resultado = gerar_pdf_analitico_completo(json_data)
 
-            img1 = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            vel1.save(img1.name)
-            img2 = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            vel2.save(img2.name)
+        # Salvar no Drive
+        file_metadata = {
+            "name": resultado["nome_arquivo"],
+            "parents": [id_lider],
+            "mimeType": "application/pdf"
+        }
+        media = MediaIoBaseUpload(resultado["pdf"], mimetype="application/pdf", resumable=True)
+        arquivo_salvo = service.files().create(body=file_metadata, media_body=media, fields="id, webViewLink").execute()
 
-            c.setFont("Helvetica", 9)
-            c.drawString(2 * cm, y, f"{cod} - Autoavaliação")
-            c.drawInlineImage(img1.name, 2 * cm, y - 1.1 * cm, width=12 * cm, height=1 * cm)
-
-            y -= 1.7 * cm
-
-            c.drawString(2 * cm, y, f"{cod} - Média da Equipe")
-            c.drawInlineImage(img2.name, 2 * cm, y - 1.1 * cm, width=12 * cm, height=1 * cm)
-
-            y -= 2.0 * cm
-
-            c.setStrokeColorRGB(0.7, 0.7, 0.7)
-            c.line(1.5 * cm, y, width - 1.5 * cm, y)
-            y -= 0.7 * cm
-
-            if y < 5 * cm:
-                c.showPage()
-                y = height - 2 * cm
-
-        c.save()
-
-        try:
-            file_metadata = {"name": nome_pdf, "parents": [id_lider]}
-            media = MediaFileUpload(tmp_path, mimetype="application/pdf", resumable=False)
-            enviado = service.files().create(
-                body=file_metadata, media_body=media, fields="id, name, parents"
-            ).execute()
-
-            print("📂 RELATÓRIO SALVO NO DRIVE:")
-            print("📝 Nome:", enviado['name'])
-            print("📁 Pasta destino ID:", enviado['parents'][0])
-            print("🔗 Link direto:", f"https://drive.google.com/file/d/{enviado['id']}/view")
-
-            return jsonify({
-                "mensagem": "✅ Relatório analítico gerado e salvo com sucesso.",
-                "arquivo": enviado['name'],
-                "link": f"https://drive.google.com/file/d/{enviado['id']}/view"
-            })
-
-        except Exception as e:
-            print("❌ ERRO AO ENVIAR PARA O DRIVE:", str(e))
-            return jsonify({"erro": "Erro ao salvar no Drive", "detalhe": str(e)}), 500
+        return jsonify({
+            "mensagem": "✅ Relatório analítico gerado e salvo com sucesso.",
+            "nome": resultado["nome_arquivo"],
+            "link": arquivo_salvo.get("webViewLink", "")
+        })
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
