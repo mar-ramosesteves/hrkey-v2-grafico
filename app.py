@@ -340,6 +340,7 @@ def gerar_relatorio_analitico():
         from reportlab.pdfgen import canvas
         from reportlab.lib.units import cm
         from PIL import Image
+        from matplotlib import pyplot as plt
         import numpy as np
 
         dados = request.get_json()
@@ -377,27 +378,127 @@ def gerar_relatorio_analitico():
             status, done = downloader.next_chunk()
 
         json_data = json.loads(fh.getvalue().decode("utf-8"))
+        respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
+        respostas_equipes = json_data.get("avaliacoesEquipe", [])
 
-        # 🔧 Geração do PDF (exemplo simples)
+        def calcular_percentuais(respostas_dict):
+            total_por_arquetipo = {a: 0 for a in arquetipos}
+            max_por_arquetipo = {a: 0 for a in arquetipos}
+            for cod in perguntas:
+                try:
+                    raw = respostas_dict.get(cod, 0)
+                    nota = int(round(float(raw)))
+                    if nota < 1 or nota > 6:
+                        continue
+                except:
+                    continue
+                for arq in arquetipos:
+                    chave = f"{arq}{nota}{cod}"
+                    linha = matriz[matriz["CHAVE"] == chave]
+                    if not linha.empty:
+                        pontos = linha["PONTOS_OBTIDOS"].values[0]
+                        maximo = linha["PONTOS_MAXIMOS"].values[0]
+                        total_por_arquetipo[arq] += pontos
+                        max_por_arquetipo[arq] += maximo
+            return {
+                a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
+                for a in arquetipos
+            }
+
+        def calcular_percentuais_equipes(lista_respostas):
+            totais_por_arquetipo = {a: 0 for a in arquetipos}
+            total_avaliacoes = 0
+            for resposta in lista_respostas:
+                respostas_dict = resposta.get("respostas", {})
+                if not respostas_dict:
+                    continue
+                percentuais = calcular_percentuais(respostas_dict)
+                for arq in arquetipos:
+                    totais_por_arquetipo[arq] += percentuais.get(arq, 0)
+                total_avaliacoes += 1
+            if total_avaliacoes == 0:
+                return {a: 0 for a in arquetipos}
+            return {
+                a: round(totais_por_arquetipo[a] / total_avaliacoes, 1)
+                for a in arquetipos
+            }
+
+        def criar_velocimetro_horizontal(valor, cor):
+            fig, ax = plt.subplots(figsize=(6, 0.6))
+            ax.barh(0, valor, color=cor, height=0.125)
+            ax.set_xlim(0, 100)
+            ax.set_xticks(np.arange(0, 110, 10))
+            ax.set_xticklabels([f"{i}%" for i in range(0, 110, 10)])
+            ax.set_yticks([])
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["left"].set_visible(False)
+            ax.spines["bottom"].set_color("#999999")
+            for spine in ax.spines.values():
+                spine.set_linewidth(0.5)
+            fig.tight_layout()
+            img_buf = io.BytesIO()
+            plt.savefig(img_buf, format="png", bbox_inches="tight", dpi=100)
+            plt.close(fig)
+            img_buf.seek(0)
+            return Image.open(img_buf).copy()
+
+        pct_auto = calcular_percentuais(respostas_auto)
+        pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+
         nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
         c = canvas.Canvas(tmp_path, pagesize=A4)
         width, height = A4
-
         c.setFont("Helvetica-Bold", 14)
         c.drawString(2 * cm, height - 2 * cm, "Relatório Analítico por Arquétipos")
         c.setFont("Helvetica", 10)
         c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa}")
         c.drawString(2 * cm, height - 3.1 * cm, f"Líder: {emailLider} | Rodada: {codrodada}")
-        c.drawString(2 * cm, height - 3.6 * cm, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+        c.drawString(2 * cm, height - 3.6 * cm, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
         c.showPage()
+
+        perguntas_formatadas = perguntas
+        y = height - 2 * cm
+        for i, cod in enumerate(perguntas_formatadas):
+            resp_auto = respostas_auto.get(cod)
+            media_eq = np.mean([
+                float(r.get("respostas", {}).get(cod, 0))
+                for r in respostas_equipes if r.get("respostas", {}).get(cod)
+            ]) if respostas_equipes else 0
+
+            vel1 = criar_velocimetro_horizontal(float(resp_auto) * 16.67, "royalblue") if resp_auto else criar_velocimetro_horizontal(0, "lightgrey")
+            vel2 = criar_velocimetro_horizontal(media_eq * 16.67, "darkorange") if media_eq else criar_velocimetro_horizontal(0, "lightgrey")
+
+            img1 = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+            vel1.save(img1.name)
+            img2 = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+            vel2.save(img2.name)
+
+            c.setFont("Helvetica", 9)
+            c.drawString(2 * cm, y, f"{cod} - Autoavaliação")
+            c.drawInlineImage(img1.name, 2 * cm, y - 1.1 * cm, width=12 * cm, height=1 * cm)
+
+            y -= 1.7 * cm
+
+            c.drawString(2 * cm, y, f"{cod} - Média da Equipe")
+            c.drawInlineImage(img2.name, 2 * cm, y - 1.1 * cm, width=12 * cm, height=1 * cm)
+
+            y -= 2.0 * cm
+
+            c.setStrokeColorRGB(0.7, 0.7, 0.7)
+            c.line(1.5 * cm, y, width - 1.5 * cm, y)
+            y -= 0.7 * cm
+
+            if y < 5 * cm:
+                c.showPage()
+                y = height - 2 * cm
+
         c.save()
 
-        # 💾 Upload no Drive com verificação
         try:
             file_metadata = {"name": nome_pdf, "parents": [id_lider]}
             media = MediaFileUpload(tmp_path, mimetype="application/pdf", resumable=False)
-
             enviado = service.files().create(
                 body=file_metadata, media_body=media, fields="id, name, parents"
             ).execute()
