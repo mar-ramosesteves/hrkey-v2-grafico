@@ -340,8 +340,9 @@ def gerar_relatorio_analitico():
         from reportlab.pdfgen import canvas
         from reportlab.lib.units import cm
         from PIL import Image
-        from matplotlib import pyplot as plt
         import numpy as np
+        import matplotlib.pyplot as plt
+        import tempfile
 
         dados = request.get_json()
         empresa = dados.get("empresa")
@@ -353,7 +354,7 @@ def gerar_relatorio_analitico():
 
         id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
         id_rodada = garantir_pasta(codrodada, id_empresa)
-        id_lider = garantir_pasta(emailLider, id_rodada)
+        id_lider = garantir_pasta(emailLider, id_rodado)
 
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
@@ -376,8 +377,8 @@ def gerar_relatorio_analitico():
         done = False
         while not done:
             status, done = downloader.next_chunk()
-
         json_data = json.loads(fh.getvalue().decode("utf-8"))
+
         respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
         respostas_equipes = json_data.get("avaliacoesEquipe", [])
 
@@ -442,9 +443,6 @@ def gerar_relatorio_analitico():
             plt.close(fig)
             img_buf.seek(0)
             return Image.open(img_buf).copy()
-
-        pct_auto = calcular_percentuais(respostas_auto)
-        pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
         nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
