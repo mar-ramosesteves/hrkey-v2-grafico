@@ -325,25 +325,9 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 def ver_arquetipos():
     return jsonify(arquetipos_dominantes)
 
-@app.route("/gerar-relatorio-analitico", methods=["POST", "OPTIONS"])
+@app.route("/gerar-relatorio-analitico", methods=["POST"])
 def gerar_relatorio_analitico():
-    if request.method == "OPTIONS":
-        response = jsonify({'status': 'CORS liberado para gerar-relatorio-analitico'})
-        response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
-        return response
-
     try:
-        import gc
-        from reportlab.lib.pagesizes import A4
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.units import cm
-        from PIL import Image
-        import numpy as np
-        from matplotlib.backends.backend_pdf import PdfPages
-        import matplotlib.pyplot as plt
-
         dados = request.get_json()
         empresa = dados.get("empresa")
         codrodada = dados.get("codrodada")
@@ -352,12 +336,10 @@ def gerar_relatorio_analitico():
         if not all([empresa, codrodada, emailLider]):
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
-        # Garantir pastas no Drive
         id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
         id_rodada = garantir_pasta(codrodada, id_empresa)
         id_lider = garantir_pasta(emailLider, id_rodada)
 
-        # Buscar JSON consolidado
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
             fields="files(id, name, createdTime)").execute().get("files", [])
@@ -379,77 +361,96 @@ def gerar_relatorio_analitico():
         done = False
         while not done:
             status, done = downloader.next_chunk()
+
         json_data = json.loads(fh.getvalue().decode("utf-8"))
 
-        # Adicionar data de execução ao JSON
-        from datetime import datetime
-        json_data["data_execucao"] = datetime.now().strftime("%Y%m%d_%H%M%S")
+        with open("arquetipos_dominantes_por_questao.json", "r", encoding="utf-8") as f:
+            mapa_dom = json.load(f)
 
-        # Geração do PDF completo com gráficos
-        def gerar_pdf_analitico_completo(json_data):
-            arquetipos = ['Visionário', 'Conector', 'Executor', 'Protetor', 'Condutor', 'Mentor']
-            auto_por_arquetipo = json_data.get("auto_por_arquetipo", {})
-            equipe_por_arquetipo = json_data.get("equipe_por_arquetipo", {})
-            auto_por_questao = json_data.get("auto_por_questao", {})
-            equipe_por_questao = json_data.get("equipe_por_questao", {})
+        agrupado = {}
+        for cod, dupla in mapa_dom.items():
+            chave = " e ".join(sorted(dupla))
+            if chave not in agrupado:
+                agrupado[chave] = []
+            agrupado[chave].append(cod)
 
-            pdf_buffer = io.BytesIO()
-            with PdfPages(pdf_buffer) as pdf:
-                # Gráfico principal
-                fig, ax = plt.subplots(figsize=(10, 6))
-                x = np.arange(len(arquetipos))
-                auto_vals = [auto_por_arquetipo.get(a, 0) for a in arquetipos]
-                equipe_vals = [equipe_por_arquetipo.get(a, 0) for a in arquetipos]
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import cm
+        from PIL import Image
 
-                ax.bar(x - 0.2, auto_vals, width=0.4, label="Auto", alpha=0.7)
-                ax.bar(x + 0.2, equipe_vals, width=0.4, label="Equipe", alpha=0.7)
-                ax.axhline(50, color="gray", linestyle="--", linewidth=1)
-                ax.axhline(60, color="gray", linestyle="--", linewidth=1)
-                ax.set_xticks(x)
-                ax.set_xticklabels(arquetipos)
-                ax.set_ylabel("%")
-                ax.set_title("Comparativo por Arquétipo")
-                ax.legend()
-                pdf.savefig(fig)
-                plt.close()
+        def criar_velocimetro(valor, cor, titulo):
+            fig, ax = plt.subplots(figsize=(2, 1.2), subplot_kw={'projection': 'polar'})
+            ax.set_theta_offset(np.pi)
+            ax.set_theta_direction(-1)
+            ax.set_yticklabels([])
+            ax.set_xticklabels([])
+            ax.set_ylim(0, 100)
+            ax.barh(0, np.pi, height=100, color="lightgrey")
+            theta = (valor / 100) * np.pi
+            ax.barh(0, theta, height=100, color=cor)
+            ax.text(0, -10, f"{valor:.1f}%", fontsize=10, ha='center')
+            ax.set_title(titulo, fontsize=9)
+            plt.tight_layout()
+            tmp_img = io.BytesIO()
+            plt.savefig(tmp_img, format="png", bbox_inches="tight", dpi=150)
+            plt.close(fig)
+            tmp_img.seek(0)
+            return Image.open(tmp_img)
 
-                # 98 gráficos por questão
-                for i in range(1, 50):
-                    cod = f"Q{str(i).zfill(2)}"
-                    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8.5, 4))
-                    val_auto = auto_por_questao.get(cod, 0)
-                    val_equipe = equipe_por_questao.get(cod, 0)
-                    for ax, val, titulo in zip((ax1, ax2), (val_auto, val_equipe), ("Auto", "Equipe")):
-                        ax.barh([0], [val], height=0.125, color='blue')
-                        ax.set_xlim(0, 100)
-                        ax.set_yticks([])
-                        ax.set_xticks(np.arange(0, 101, 10))
-                        ax.set_xticklabels([f"{x}%" for x in range(0, 101, 10)])
-                        ax.set_title(f"{titulo} - {cod}")
-                    plt.tight_layout()
-                    pdf.savefig(fig)
-                    plt.close()
+        nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
+        c = canvas.Canvas(tmp_path, pagesize=A4)
+        width, height = A4
 
-            pdf_buffer.seek(0)
-            nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{json_data.get('empresa','')}_{json_data.get('emailLider','')}_{json_data.get('codrodada','')}_{json_data.get('data_execucao','')}.pdf"
-            return {"pdf": pdf_buffer, "nome_arquivo": nome_pdf}
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(2 * cm, height - 2 * cm, "Relatório Analítico por Arquétipos")
+        c.setFont("Helvetica", 10)
+        c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}")
+        c.drawString(2 * cm, height - 3.1 * cm, datetime.now().strftime("%d/%m/%Y %H:%M"))
 
-        resultado = gerar_pdf_analitico_completo(json_data)
+        y = height - 4 * cm
+        espaco = 2.2 * cm
 
-        # Salvar no Drive
-        file_metadata = {
-            "name": resultado["nome_arquivo"],
-            "parents": [id_lider],
-            "mimeType": "application/pdf"
-        }
-        media = MediaIoBaseUpload(resultado["pdf"], mimetype="application/pdf", resumable=True)
-        arquivo_salvo = service.files().create(body=file_metadata, media_body=media, fields="id, webViewLink").execute()
+        matriz_df = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
 
-        return jsonify({
-            "mensagem": "✅ Relatório analítico gerado e salvo com sucesso.",
-            "nome": resultado["nome_arquivo"],
-            "link": arquivo_salvo.get("webViewLink", "")
-        })
+        for grupo, codigos in agrupado.items():
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
+            y -= espaco / 2
+
+            for cod in codigos:
+                afirmacoes = matriz_df[matriz_df["CHAVE"].str.endswith(cod)]
+                if afirmacoes.empty:
+                    continue
+                linha = afirmacoes.iloc[0]
+                texto = linha.get("AFIRMACAO", "")
+                tendencia = linha.get("Tendência", "")
+                percentual = linha.get("% Tendência", "")
+
+                c.setFont("Helvetica", 10)
+                c.drawString(2 * cm, y, f"{cod}: {texto}")
+                y -= espaco / 2
+                c.drawString(2.5 * cm, y, f"Tendência: {tendencia} | %: {percentual}")
+                y -= espaco
+
+                velocimetro = criar_velocimetro(float(percentual), "royalblue", "% Tendência")
+                img_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+                velocimetro.save(img_path)
+                c.drawInlineImage(img_path, 12 * cm, y, width=4 * cm, height=2 * cm)
+                y -= 2.5 * cm
+
+                if y < 4 * cm:
+                    c.showPage()
+                    y = height - 4 * cm
+
+        c.save()
+
+        file_metadata = {"name": nome_pdf, "parents": [id_lider]}
+        media = MediaFileUpload(tmp_path, mimetype="application/pdf", resumable=False)
+        enviado = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+
+        return jsonify({"mensagem": "✅ Relatório analítico gerado e salvo com sucesso."})
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
