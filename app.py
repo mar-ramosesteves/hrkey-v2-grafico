@@ -387,3 +387,39 @@ def gerar_relatorio_analitico():
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
+
+
+@app.route("/verificar-relatorios", methods=["POST"])
+def verificar_relatorios():
+    try:
+        dados = request.get_json()
+        empresa = dados.get("empresa")
+        codrodada = dados.get("codrodada")
+        emailLider = dados.get("emailLider")
+
+        id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
+        id_rodada = garantir_pasta(codrodada, id_empresa)
+        id_lider = garantir_pasta(emailLider, id_rodada)
+
+        arquivos = service.files().list(
+            q=f"'{id_lider}' in parents and trashed = false and mimeType = 'application/pdf'",
+            fields="files(id, name, createdTime)").execute().get("files", [])
+
+        relatorios = sorted(arquivos, key=lambda x: x["createdTime"], reverse=True)
+
+        return jsonify({
+            "quantidade": len(relatorios),
+            "arquivos": [
+                {
+                    "nome": a["name"],
+                    "data": a["createdTime"],
+                    "link": f"https://drive.google.com/file/d/{a['id']}/view"
+                }
+                for a in relatorios
+            ]
+        })
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
