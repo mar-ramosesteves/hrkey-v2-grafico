@@ -325,9 +325,18 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 def ver_arquetipos():
     return jsonify(arquetipos_dominantes)
 
-@app.route("/gerar-relatorio-analitico", methods=["POST"])
+@app.route("/gerar-relatorio-analitico", methods=["POST", "OPTIONS"])
 def gerar_relatorio_analitico():
+    if request.method == "OPTIONS":
+        response = jsonify({'status': 'CORS preflight OK'})
+        response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        return response
+
     try:
+        # ... (resto do seu código continua igual)
+
         import gc
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
