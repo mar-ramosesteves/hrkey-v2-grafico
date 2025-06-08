@@ -362,41 +362,40 @@ def gerar_relatorio_analitico():
         while not done:
             status, done = downloader.next_chunk()
 
-        json_data = json.loads(fh.getvalue().decode("utf-8"))
+        relatorio = json.loads(fh.getvalue().decode("utf-8"))
+        auto = relatorio.get("autoavaliacao", {})
+        equipes = relatorio.get("avaliacoesEquipe", [])
 
-        with open("arquetipos_dominantes_por_questao.json", "r", encoding="utf-8") as f:
+        respostas_auto = auto.get("respostas", {})
+        respostas_equipes = [r.get("respostas", {}) for r in equipes if r.get("respostas")]
+
+        with open("arquetipos_dominantes_por_questao.json", encoding="utf-8") as f:
             mapa_dom = json.load(f)
 
-        agrupado = {}
-        for cod, dupla in mapa_dom.items():
-            chave = " e ".join(sorted(dupla))
-            if chave not in agrupado:
-                agrupado[chave] = []
-            agrupado[chave].append(cod)
+        matriz_df = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+
+        def extrair_valor(matriz_df, cod, nota):
+            try:
+                nota = int(round(float(nota)))
+                if nota < 1 or nota > 6:
+                    return None
+            except:
+                return None
+
+            for arq in arquetipos:
+                chave = f"{arq}{nota}{cod}"
+                linha = matriz_df[matriz_df["CHAVE"] == chave]
+                if not linha.empty:
+                    return {
+                        "tendencia": linha["Tendência"].values[0],
+                        "percentual": linha["% Tendência"].values[0],
+                        "afirmacao": linha["AFIRMACAO"].values[0]
+                    }
+            return None
 
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
         from reportlab.lib.units import cm
-        from PIL import Image
-
-        def criar_velocimetro(valor, cor, titulo):
-            fig, ax = plt.subplots(figsize=(2, 1.2), subplot_kw={'projection': 'polar'})
-            ax.set_theta_offset(np.pi)
-            ax.set_theta_direction(-1)
-            ax.set_yticklabels([])
-            ax.set_xticklabels([])
-            ax.set_ylim(0, 100)
-            ax.barh(0, np.pi, height=100, color="lightgrey")
-            theta = (valor / 100) * np.pi
-            ax.barh(0, theta, height=100, color=cor)
-            ax.text(0, -10, f"{valor:.1f}%", fontsize=10, ha='center')
-            ax.set_title(titulo, fontsize=9)
-            plt.tight_layout()
-            tmp_img = io.BytesIO()
-            plt.savefig(tmp_img, format="png", bbox_inches="tight", dpi=150)
-            plt.close(fig)
-            tmp_img.seek(0)
-            return Image.open(tmp_img)
 
         nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
@@ -410,35 +409,48 @@ def gerar_relatorio_analitico():
         c.drawString(2 * cm, height - 3.1 * cm, datetime.now().strftime("%d/%m/%Y %H:%M"))
 
         y = height - 4 * cm
-        espaco = 2.2 * cm
+        espacamento = 2.2 * cm
 
-        matriz_df = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+        agrupado = {}
+        for cod, dupla in mapa_dom.items():
+            chave = " e ".join(sorted(dupla))
+            if chave not in agrupado:
+                agrupado[chave] = []
+            agrupado[chave].append(cod)
 
         for grupo, codigos in agrupado.items():
             c.setFont("Helvetica-Bold", 12)
             c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
-            y -= espaco / 2
+            y -= espacamento / 2
 
             for cod in codigos:
-                afirmacoes = matriz_df[matriz_df["CHAVE"].str.endswith(cod)]
-                if afirmacoes.empty:
+                info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
+                medias_equipes = []
+                for r in respostas_equipes:
+                    val = extrair_valor(matriz_df, cod, r.get(cod))
+                    if val:
+                        medias_equipes.append(val)
+
+                if not info_auto and not medias_equipes:
                     continue
-                linha = afirmacoes.iloc[0]
-                texto = linha.get("AFIRMACAO", "")
-                tendencia = linha.get("Tendência", "")
-                percentual = linha.get("% Tendência", "")
+
+                tendencia_auto = info_auto["tendencia"] if info_auto else "-"
+                percentual_auto = info_auto["percentual"] if info_auto else "-"
+                texto = info_auto["afirmacao"] if info_auto else cod
+
+                tendencia_eq = "-"
+                percentual_eq = "-"
+                if medias_equipes:
+                    tendencia_eq = medias_equipes[0]["tendencia"]
+                    percentual_eq = medias_equipes[0]["percentual"]
 
                 c.setFont("Helvetica", 10)
                 c.drawString(2 * cm, y, f"{cod}: {texto}")
-                y -= espaco / 2
-                c.drawString(2.5 * cm, y, f"Tendência: {tendencia} | %: {percentual}")
-                y -= espaco
-
-                velocimetro = criar_velocimetro(float(percentual), "royalblue", "% Tendência")
-                img_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
-                velocimetro.save(img_path)
-                c.drawInlineImage(img_path, 12 * cm, y, width=4 * cm, height=2 * cm)
-                y -= 2.5 * cm
+                y -= espacamento / 2
+                c.drawString(2.5 * cm, y, f"Autoavaliação → Tendência: {tendencia_auto} | %: {percentual_auto}")
+                y -= espacamento / 2
+                c.drawString(2.5 * cm, y, f"Média Equipe → Tendência: {tendencia_eq} | %: {percentual_eq}")
+                y -= espacamento
 
                 if y < 4 * cm:
                     c.showPage()
