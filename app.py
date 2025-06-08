@@ -405,7 +405,7 @@ def gerar_relatorio_analitico():
         c = canvas.Canvas(tmp_path, pagesize=A4)
         width, height = A4
 
-        c.setFont("Helvetica-Bold", 14)
+        c.setFont("Helvetica-Bold", 30)
         c.drawString(2 * cm, height - 2 * cm, "Relatório Analítico por Arquétipos")
         c.setFont("Helvetica", 10)
         c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}")
