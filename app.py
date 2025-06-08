@@ -394,25 +394,9 @@ def gerar_relatorio_analitico():
                     }
             return None
 
-        def gerar_velocimetro(percentual: float, cor: str):
-            caminho = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
-            fig, ax = plt.subplots(figsize=(4, 0.4))
-            ax.barh([0], [percentual], color=cor)
-            ax.set_xlim(0, 100)
-            ax.set_xticks(range(0, 101, 10))
-            ax.set_xticklabels([f"{x}%" for x in range(0, 101, 10)])
-            ax.set_yticks([])
-            for spine in ax.spines.values():
-                spine.set_visible(False)
-            plt.tight_layout()
-            plt.savefig(caminho, dpi=100)
-            plt.close()
-            return caminho
-
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
         from reportlab.lib.units import cm
-        from reportlab.platypus import Image
 
         nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
@@ -435,6 +419,22 @@ def gerar_relatorio_analitico():
                 agrupado[chave] = []
             agrupado[chave].append(cod)
 
+        def desenhar_barra(c, x, y, percentual, label):
+            largura_max = 12 * cm
+            altura = 0.4 * cm
+            cor = (0.2, 0.6, 0.2) if "favorável" in label.lower() else (1.0, 0.5, 0.0)
+            largura = largura_max * (percentual / 100)
+
+            c.setFillColorRGB(*cor)
+            c.rect(x, y, largura, altura, fill=True, stroke=False)
+
+            c.setFillColorRGB(0, 0, 0)
+            for i in range(0, 110, 10):
+                xi = x + (largura_max * i / 100)
+                c.line(xi, y, xi, y + altura)
+                c.setFont("Helvetica", 6)
+                c.drawString(xi - 0.2 * cm, y - 0.3 * cm, f"{i}%")
+
         for grupo, codigos in agrupado.items():
             c.setFont("Helvetica-Bold", 12)
             c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
@@ -443,6 +443,7 @@ def gerar_relatorio_analitico():
             for cod in codigos:
                 info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
 
+                # calcular média por questão
                 somatorio = 0
                 qtd_avaliacoes = 0
                 for r in respostas_equipes:
@@ -472,19 +473,15 @@ def gerar_relatorio_analitico():
                 c.drawString(2 * cm, y, f"{cod}: {texto}")
                 y -= espacamento / 2
                 c.drawString(2.5 * cm, y, f"Autoavaliação → Tendência: {tendencia_auto} | %: {percentual_auto}%")
-                y -= espacamento / 2
-                cor_auto = "green" if "Favorável" in tendencia_auto else "orange"
-                caminho_auto = gerar_velocimetro(percentual_auto, cor_auto)
-                c.drawImage(caminho_auto, 2.5 * cm, y, width=8 * cm, height=1 * cm)
+                y -= 0.6 * cm
+                desenhar_barra(c, 2.5 * cm, y, percentual_auto, tendencia_auto)
                 y -= espacamento / 2
                 c.drawString(2.5 * cm, y, f"Média Equipe → Tendência: {tendencia_eq} | %: {percentual_eq}%")
-                y -= espacamento / 2
-                cor_eq = "green" if "Favorável" in tendencia_eq else "orange"
-                caminho_eq = gerar_velocimetro(percentual_eq, cor_eq)
-                c.drawImage(caminho_eq, 2.5 * cm, y, width=8 * cm, height=1 * cm)
+                y -= 0.6 * cm
+                desenhar_barra(c, 2.5 * cm, y, percentual_eq, tendencia_eq)
                 y -= espacamento / 2
 
-                if y < 5 * cm:
+                if y < 4 * cm:
                     c.showPage()
                     y = height - 4 * cm
 
