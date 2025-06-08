@@ -325,7 +325,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 def ver_arquetipos():
     return jsonify(arquetipos_dominantes)
 
-@@app.route("/gerar-relatorio-analitico", methods=["POST", "OPTIONS"])
+@app.route("/gerar-relatorio-analitico", methods=["POST", "OPTIONS"])
 def gerar_relatorio_analitico():
     if request.method == "OPTIONS":
         response = jsonify({'status': 'CORS liberado para gerar-relatorio-analitico'})
