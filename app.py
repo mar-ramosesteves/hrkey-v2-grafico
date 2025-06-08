@@ -374,25 +374,6 @@ def gerar_relatorio_analitico():
 
         matriz_df = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
 
-        def extrair_valor(matriz_df, cod, nota):
-            try:
-                nota = int(round(float(nota)))
-                if nota < 1 or nota > 6:
-                    return None
-            except:
-                return None
-
-            for arq in arquetipos:
-                chave = f"{arq}{nota}{cod}"
-                linha = matriz_df[matriz_df["CHAVE"] == chave]
-                if not linha.empty:
-                    return {
-                        "tendencia": linha["Tendência"].values[0],
-                        "percentual": linha["% Tendência"].values[0],
-                        "afirmacao": linha["AFIRMACAO"].values[0]
-                    }
-            return None
-
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
         from reportlab.lib.units import cm
@@ -424,25 +405,49 @@ def gerar_relatorio_analitico():
             y -= espacamento / 2
 
             for cod in codigos:
-                info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
-                medias_equipes = []
+                # AUTOAVALIAÇÃO
+                info_auto = None
+                try:
+                    nota_auto = int(round(float(respostas_auto.get(cod))))
+                    if 1 <= nota_auto <= 6:
+                        for arq in arquetipos:
+                            chave = f"{arq}{nota_auto}{cod}"
+                            linha = matriz_df[matriz_df["CHAVE"] == chave]
+                            if not linha.empty:
+                                info_auto = {
+                                    "tendencia": linha["Tendência"].values[0],
+                                    "percentual": f"{round(linha['% Tendência'].values[0], 1)}%",
+                                    "afirmacao": linha["AFIRMACAO"].values[0]
+                                }
+                                break
+                except:
+                    pass
+
+                # MÉDIA DA EQUIPE
+                notas_validas = []
                 for r in respostas_equipes:
-                    val = extrair_valor(matriz_df, cod, r.get(cod))
-                    if val:
-                        medias_equipes.append(val)
-
-                if not info_auto and not medias_equipes:
-                    continue
-
-                tendencia_auto = info_auto["tendencia"] if info_auto else "-"
-                percentual_auto = info_auto["percentual"] if info_auto else "-"
-                texto = info_auto["afirmacao"] if info_auto else cod
+                    try:
+                        val = int(r.get(cod))
+                        if 1 <= val <= 6:
+                            notas_validas.append(val)
+                    except:
+                        continue
 
                 tendencia_eq = "-"
                 percentual_eq = "-"
-                if medias_equipes:
-                    tendencia_eq = medias_equipes[0]["tendencia"]
-                    percentual_eq = medias_equipes[0]["percentual"]
+                if notas_validas:
+                    media = round(sum(notas_validas) / len(notas_validas))
+                    for arq in arquetipos:
+                        chave = f"{arq}{media}{cod}"
+                        linha = matriz_df[matriz_df["CHAVE"] == chave]
+                        if not linha.empty:
+                            percentual_eq = f"{round(linha['% Tendência'].values[0], 1)}%"
+                            tendencia_eq = linha["Tendência"].values[0]
+                            break
+
+                texto = info_auto["afirmacao"] if info_auto else cod
+                tendencia_auto = info_auto["tendencia"] if info_auto else "-"
+                percentual_auto = info_auto["percentual"] if info_auto else "-"
 
                 c.setFont("Helvetica", 10)
                 c.drawString(2 * cm, y, f"{cod}: {texto}")
