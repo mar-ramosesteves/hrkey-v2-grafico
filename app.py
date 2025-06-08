@@ -338,7 +338,7 @@ def gerar_relatorio_analitico():
 
         id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
         id_rodada = garantir_pasta(codrodada, id_empresa)
-        id_lider = garantir_pasta(emailLider, id_rodada)
+        id_lider = garantir_pasta(emailLider, id_rodado)
 
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
@@ -422,12 +422,10 @@ def gerar_relatorio_analitico():
         def desenhar_barra(c, x, y, percentual, label):
             largura_max = 12 * cm
             altura = 0.4 * cm
-            cor = (0.2, 0.6, 0.2) if "favorável" in label.lower() else (1.0, 0.5, 0.0)
+            cor = (1.0, 0.5, 0.0) if any(w in label.lower() for w in ["desfavorável", "pouco desfavorável", "muito desfavorável"]) else (0.2, 0.6, 0.2)
             largura = largura_max * (percentual / 100)
-
             c.setFillColorRGB(*cor)
             c.rect(x, y, largura, altura, fill=True, stroke=False)
-
             c.setFillColorRGB(0, 0, 0)
             for i in range(0, 110, 10):
                 xi = x + (largura_max * i / 100)
@@ -442,8 +440,6 @@ def gerar_relatorio_analitico():
 
             for cod in codigos:
                 info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
-
-                # calcular média por questão
                 somatorio = 0
                 qtd_avaliacoes = 0
                 for r in respostas_equipes:
