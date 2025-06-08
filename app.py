@@ -436,6 +436,8 @@ def gerar_relatorio_analitico():
                 c.drawString(xi - 0.2 * cm, y - 0.3 * cm, f"{i}%")
 
         for grupo, codigos in agrupado.items():
+            c.showPage()  # Força nova página a cada novo grupo
+            y = height - 4 * cm  # Reinicia posição do texto no topo da página
             c.setFont("Helvetica-Bold", 12)
             c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
             y -= espacamento / 2
