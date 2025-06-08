@@ -408,7 +408,7 @@ def gerar_relatorio_analitico():
         c.setFont("Helvetica-Bold", 30)
         titulo = "Relatório Analítico por Arquétipos"
         c.drawCentredString(width / 2, height / 2, titulo)
-        c.showPage()  # Avança para a próxima página depois do título
+        
         
         c.setFont("Helvetica", 10)
         c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}")
