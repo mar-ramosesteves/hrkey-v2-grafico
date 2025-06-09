@@ -463,11 +463,13 @@ def gerar_relatorio_analitico():
             for grupo, codigos in agrupado.items():
                 if c.getPageNumber() > 1:
                     inserir_rodape(c, width, empresa, emailLider, codrodada)
-                c.showPage()  # Quebra a página
-                y = height - 4 * cm
+                    c.showPage()
+
+                y = height - 4 * cm  # reinicia posição
                 c.setFont("Helvetica-Bold", 12)
                 c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
                 y -= espacamento / 2
+
 
             for cod in codigos:
                 info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
