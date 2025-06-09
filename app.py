@@ -512,7 +512,7 @@ def gerar_relatorio_analitico():
                 c.drawString(2.5 * cm, y, f"Média Equipe → Tendência: {tendencia_eq} | %: {percentual_eq}%")
                 y -= 0.6 * cm
                 desenhar_barra(c, 2.5 * cm, y, percentual_eq, tendencia_eq)
-                y -= espacamento
+                y -= espacamento / 2
 
                 if y < 4 * cm:
                     c.showPage()
