@@ -457,12 +457,18 @@ def gerar_relatorio_analitico():
                 c.setFont("Helvetica", 6)
                 c.drawString(xi - 0.2 * cm, y - 0.3 * cm, f"{i}%")
 
+        primeiro_grupo = True
         for grupo, codigos in agrupado.items():
-            c.showPage()
+            if not primeiro_grupo:
+                c.showPage()
+            else:
+                primeiro_grupo = False
+
             y = height - 4 * cm
             c.setFont("Helvetica-Bold", 12)
             c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
             y -= espacamento / 2
+
 
             for cod in codigos:
                 info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
