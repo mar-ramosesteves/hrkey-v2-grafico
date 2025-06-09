@@ -523,10 +523,18 @@ def gerar_relatorio_analitico():
 
                 
 
-                if y < 5 * cm:
-                    inserir_rodape(c, width, empresa, emailLider, codrodada)
-                    c.showPage()
-                    y = height - 4 * cm
+                if y < 4 * cm:
+                    if c.getPageNumber() > 1:
+                    c.setFont("Helvetica", 8)
+                    rodape_y = 1.5 * cm
+                    info1 = f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}"
+                    info2 = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    c.drawString(2 * cm, rodape_y, f"{info1} | {info2}")
+                    c.drawRightString(width - 2 * cm, rodape_y, f"Página {c.getPageNumber() - 1}")
+
+                c.showPage()
+                y = height - 4 * cm
+
 
 
         c.save()
