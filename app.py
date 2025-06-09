@@ -19,6 +19,8 @@ import time
 import json
 
 from math import pi
+from reportlab.lib.units import cm
+
 
 
 # Carrega o dicionário de arquétipos dominantes por questão
@@ -514,6 +516,8 @@ def gerar_relatorio_analitico():
                 y -= 0.6 * cm
                 desenhar_barra(c, 2.5 * cm, y, percentual_eq, tendencia_eq)
                 y -= espacamento / 2
+
+                
 
                 if y < 4 * cm:
                     inserir_rodape(c, width, empresa, emailLider, codrodada)
