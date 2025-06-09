@@ -8,7 +8,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload, MediaFileUpload
 from datetime import datetime
-import pandas as pd
+import pandas as pdIF
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import tempfile
@@ -461,11 +461,8 @@ def gerar_relatorio_analitico():
                 c.drawString(xi - 0.2 * cm, y - 0.3 * cm, f"{i}%")
 
             for grupo, codigos in agrupado.items():
-                if c.getPageNumber() > 1:
-                    inserir_rodape(c, width, empresa, emailLider, codrodada)
-                    c.showPage()
-
-                y = height - 4 * cm  # reinicia posição
+                c.showPage()  # Força nova página a cada novo grupo
+                y = height - 4 * cm  # Reinicia posição do texto no topo da página
                 c.setFont("Helvetica-Bold", 12)
                 c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
                 y -= espacamento / 2
