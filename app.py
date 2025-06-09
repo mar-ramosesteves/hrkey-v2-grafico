@@ -462,7 +462,7 @@ def gerar_relatorio_analitico():
 
             for grupo, codigos in agrupado.items():
                 if c.getPageNumber() > 1:
-                inserir_rodape(c, width, empresa, emailLider, codrodada)
+                    inserir_rodape(c, width, empresa, emailLider, codrodada)
                 c.showPage()  # Quebra a página
                 y = height - 4 * cm
                 c.setFont("Helvetica-Bold", 12)
