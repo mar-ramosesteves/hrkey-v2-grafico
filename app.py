@@ -435,7 +435,7 @@ def gerar_relatorio_analitico():
         c.showPage()
 
 
-        y = height - 4 * cm
+        y = height - 3 * cm
         espacamento = 2.2 * cm
 
         agrupado = {}
@@ -466,7 +466,7 @@ def gerar_relatorio_analitico():
             else:
                 primeiro_grupo = False
 
-            y = height - 4 * cm
+            y = height - 3 * cm
             c.setFont("Helvetica-Bold", 12)
             c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
             y -= espacamento / 2
@@ -524,7 +524,7 @@ def gerar_relatorio_analitico():
 
                 if y < 4 * cm:
                     c.showPage()
-                    y = height - 4 * cm
+                    y = height - 3 * cm
 
         c.save()
 
