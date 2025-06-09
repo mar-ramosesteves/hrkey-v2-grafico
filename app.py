@@ -20,6 +20,8 @@ import json
 
 from math import pi
 from reportlab.lib.units import cm
+import pandas as pd
+
 
 
 
