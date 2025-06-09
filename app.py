@@ -355,7 +355,6 @@ def gerar_relatorio_analitico():
         id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
         id_rodada = garantir_pasta(codrodada, id_empresa)
         id_lider = garantir_pasta(emailLider, id_rodada)
-        
 
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
@@ -423,20 +422,16 @@ def gerar_relatorio_analitico():
         c.setFont("Helvetica-Bold", 30)
         titulo = "Relatório Analítico por Arquétipos"
         c.drawCentredString(width / 2, height / 2, titulo)
-        
-        
+
         c.setFont("Helvetica", 12)
         info1 = f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}"
         info2 = datetime.now().strftime("%d/%m/%Y %H:%M")
 
         linha1_y = (height / 2) - 1.2 * cm
         linha2_y = linha1_y - 0.6 * cm
-        
+
         c.drawCentredString(width / 2, linha1_y, info1)
         c.drawCentredString(width / 2, linha2_y, info2)
-        
-       
-        
 
         y = height - 4 * cm
         espacamento = 2.2 * cm
@@ -462,13 +457,12 @@ def gerar_relatorio_analitico():
                 c.setFont("Helvetica", 6)
                 c.drawString(xi - 0.2 * cm, y - 0.3 * cm, f"{i}%")
 
-            for grupo, codigos in agrupado.items():
-                c.showPage()  # Força nova página a cada novo grupo
-                y = height - 4 * cm  # Reinicia posição do texto no topo da página
-                c.setFont("Helvetica-Bold", 12)
-                c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
-                y -= espacamento / 2
-
+        for grupo, codigos in agrupado.items():
+            c.showPage()
+            y = height - 4 * cm
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
+            y -= espacamento / 2
 
             for cod in codigos:
                 info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
@@ -520,21 +514,9 @@ def gerar_relatorio_analitico():
                 desenhar_barra(c, 2.5 * cm, y, percentual_eq, tendencia_eq)
                 y -= espacamento / 2
 
-                
-
                 if y < 4 * cm:
-                    if c.getPageNumber() > 1:
-                        c.setFont("Helvetica", 8)
-                        rodape_y = 1.5 * cm
-                        info1 = f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}"
-                        info2 = datetime.now().strftime("%d/%m/%Y %H:%M")
-                        c.drawString(2 * cm, rodape_y, f"{info1} | {info2}")
-                        c.drawRightString(width - 2 * cm, rodape_y, f"Página {c.getPageNumber() - 1}")
-
                     c.showPage()
                     y = height - 4 * cm
-
-
 
         c.save()
 
