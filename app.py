@@ -524,7 +524,7 @@ def gerar_relatorio_analitico():
 
                 if y < 4 * cm and cod != codigos[-1]:  # Evita página em branco no último item
                     c.setFont("Helvetica", 8)
-                    c.drawRightString(width - 2 * cm, 1.5 * cm, f"Página {c.getPageNumber()}")
+                    c.drawRightString(width - 2 * cm, 2.1 * cm, f"Página {c.getPageNumber()}")
                     c.showPage()
                     y = height - 4 * cm
 
