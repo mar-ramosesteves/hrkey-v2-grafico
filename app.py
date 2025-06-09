@@ -432,6 +432,8 @@ def gerar_relatorio_analitico():
 
         c.drawCentredString(width / 2, linha1_y, info1)
         c.drawCentredString(width / 2, linha2_y, info2)
+        c.showPage()
+
 
         y = height - 4 * cm
         espacamento = 2.2 * cm
