@@ -410,9 +410,18 @@ def gerar_relatorio_analitico():
         c.drawCentredString(width / 2, height / 2, titulo)
         
         
-        c.setFont("Helvetica", 10)
-        c.drawString(2 * cm, height - 2.6 * cm, f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}")
-        c.drawString(2 * cm, height - 3.1 * cm, datetime.now().strftime("%d/%m/%Y %H:%M"))
+        c.setFont("Helvetica", 12)
+        info1 = f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}"
+        info2 = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+        linha1_y = (height / 2) - 1.2 * cm
+        linha2_y = linha1_y - 0.6 * cm
+        
+        c.drawCentredString(width / 2, linha1_y, info1)
+        c.drawCentredString(width / 2, linha2_y, info2)
+        
+       
+        
 
         y = height - 4 * cm
         espacamento = 2.2 * cm
