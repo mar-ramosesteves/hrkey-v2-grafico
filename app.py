@@ -327,6 +327,16 @@ def ver_arquetipos():
 
 from textwrap import wrap
 
+def inserir_rodape(c, width, empresa, emailLider, codrodada):
+    if c.getPageNumber() > 1:
+        c.setFont("Helvetica", 8)
+        rodape_y = 1.5 * cm
+        info1 = f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}"
+        info2 = datetime.now().strftime("%d/%m/%Y %H:%M")
+        c.drawString(2 * cm, rodape_y, f"{info1} | {info2}")
+        c.drawRightString(width - 2 * cm, rodape_y, f"Página {c.getPageNumber() - 1}")
+
+
 @app.route("/gerar-relatorio-analitico", methods=["POST"])
 def gerar_relatorio_analitico():
     try:
@@ -342,14 +352,6 @@ def gerar_relatorio_analitico():
         id_rodada = garantir_pasta(codrodada, id_empresa)
         id_lider = garantir_pasta(emailLider, id_rodada)
         
-def inserir_rodape(c, width, empresa, emailLider, codrodada):
-    if c.getPageNumber() > 1:
-        c.setFont("Helvetica", 8)
-        rodape_y = 1.5 * cm
-        info1 = f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}"
-        info2 = datetime.now().strftime("%d/%m/%Y %H:%M")
-        c.drawString(2 * cm, rodape_y, f"{info1} | {info2}")
-        c.drawRightString(width - 2 * cm, rodape_y, f"Página {c.getPageNumber() - 1}")
 
         arquivos_json = service.files().list(
             q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
