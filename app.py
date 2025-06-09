@@ -522,9 +522,10 @@ def gerar_relatorio_analitico():
                 desenhar_barra(c, 2.5 * cm, y, percentual_eq, tendencia_eq)
                 y -= espacamento / 1
 
-                if y < 4 * cm:
+                if y < 4 * cm and cod != codigos[-1]:  # Evita página em branco no último item
                     c.showPage()
-                    y = height - 3 * cm
+                    y = height - 4 * cm
+
 
         c.save()
 
