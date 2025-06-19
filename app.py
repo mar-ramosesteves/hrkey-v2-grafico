@@ -129,6 +129,11 @@ def gerar_relatorio_json():
         for arquivo in arquivos:
             nome = arquivo['name']
             file_id = arquivo['id']
+
+            # ⚠️ Ignorar relatórios já consolidados de microambiente
+            if nome.lower().startswith("relatorio_microambiente_"):
+                continue
+
             request_drive = service.files().get_media(fileId=file_id)
             fh = io.BytesIO()
             downloader = MediaIoBaseDownload(fh, request_drive)
@@ -139,10 +144,17 @@ def gerar_relatorio_json():
             fh.seek(0)
             conteudo = json.load(fh)
             tipo = conteudo.get("tipo", "").lower()
-            if tipo.startswith("auto"):
+
+            # 🚫 Ignorar qualquer coisa de microambiente (campo tipo ou nome)
+            if "microambiente" in tipo or "microambiente" in nome.lower():
+                continue
+
+            # ✅ Arquétipos - separar auto e equipe
+            if "auto" in tipo:
                 auto = conteudo
-            else:
+            elif "equipe" in tipo:
                 equipe.append(conteudo)
+
 
         relatorio_final = {
             "empresa": empresa,
