@@ -335,6 +335,18 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         except Exception as e:
             print(f"❌ ERRO ao tentar salvar o PDF no Drive: {str(e)}")
 
+        # 🔁 Salvar JSON com os dados do gráfico
+        dados_gerados = {
+            "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
+            "empresa": empresa,
+            "codrodada": codrodada,
+            "emailLider": emailLider,
+            "n_avaliacoes": len(respostas_equipes),
+            "autoavaliacao": pct_auto,
+            "mediaEquipe": pct_equipes
+        }
+        nome_base = nome_pdf.replace(".pdf", "")
+        salvar_json_no_drive(dados_gerados, nome_base, service, id_lider)
 
 
 @app.route("/ver-arquetipos")
