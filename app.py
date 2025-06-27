@@ -559,6 +559,58 @@ def gerar_relatorio_analitico():
         media = MediaFileUpload(tmp_path, mimetype="application/pdf", resumable=False)
         enviado = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
+
+
+
+
+        # 🔁 Salvar JSON com os dados do relatório analítico
+        dados_gerados = {
+            "titulo": "RELATÓRIO ANALÍTICO ARQUÉTIPOS - POR QUESTÃO",
+            "empresa": empresa,
+            "codrodada": codrodada,
+            "emailLider": emailLider,
+            "n_avaliacoes": len(respostas_equipes),
+            "analitico": []
+        }
+
+        for grupo, codigos in agrupado.items():
+            for cod in codigos:
+                info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
+                somatorio = 0
+                qtd_avaliacoes = 0
+                for r in respostas_equipes:
+                    try:
+                        nota = int(round(float(r.get(cod, 0))))
+                        if 1 <= nota <= 6:
+                            somatorio += nota
+                            qtd_avaliacoes += 1
+                    except:
+                        continue
+
+                info_eq = None
+                if qtd_avaliacoes > 0:
+                    media = round(somatorio / qtd_avaliacoes)
+                    info_eq = extrair_valor(matriz_df, cod, media)
+
+                if not info_auto and not info_eq:
+                    continue
+
+                dados_gerados["analitico"].append({
+                    "codigo": cod,
+                    "afirmacao": info_auto["afirmacao"] if info_auto else cod,
+                    "autoavaliacao": {
+                        "tendencia": info_auto["tendencia"] if info_auto else "-",
+                        "percentual": info_auto["percentual"] if info_auto else 0
+                    },
+                    "mediaEquipe": {
+                        "tendencia": info_eq["tendencia"] if info_eq else "-",
+                        "percentual": info_eq["percentual"] if info_eq else 0
+                    }
+                })
+
+        nome_base = nome_pdf.replace(".pdf", "")
+        salvar_json_no_drive(dados_gerados, nome_base, service, id_lider)
+
         return jsonify({"mensagem": "✅ Relatório analítico gerado e salvo com sucesso."})
 
     except Exception as e:
