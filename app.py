@@ -637,7 +637,8 @@ def gerar_relatorio_analitico():
                 })
 
         nome_base = nome_pdf.replace(".pdf", "")
-        salvar_json_no_drive(dados_gerados, nome_base, service, id_lider)
+        salvar_json_ia_no_drive(dados_gerados, nome_base, service, id_lider)
+
 
         return jsonify({"mensagem": "✅ Relatório analítico gerado e salvo com sucesso."})
 
