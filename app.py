@@ -23,6 +23,36 @@ from reportlab.lib.units import cm
 import pandas as pd
 
 
+def salvar_json_ia_no_drive(dados, nome_base, service, id_lider):
+    from io import BytesIO
+    import json
+    from googleapiclient.http import MediaIoBaseUpload
+
+    nome_json = f"IA_{nome_base}.json"
+
+    # Verifica ou cria a subpasta 'ia_json' dentro da pasta do líder
+    def buscar_ou_criar_pasta(nome, pai, service):
+        query = f"'{pai}' in parents and name='{nome}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        resultado = service.files().list(q=query, fields="files(id)").execute().get("files", [])
+        if resultado:
+            return resultado[0]["id"]
+        else:
+            metadata = {"name": nome, "parents": [pai], "mimeType": "application/vnd.google-apps.folder"}
+            pasta = service.files().create(body=metadata, fields="id").execute()
+            return pasta["id"]
+
+    id_subpasta = buscar_ou_criar_pasta("ia_json", id_lider, service)
+
+    conteudo_bytes = BytesIO(json.dumps(dados, indent=2, ensure_ascii=False).encode("utf-8"))
+    media = MediaIoBaseUpload(conteudo_bytes, mimetype="application/json")
+
+    metadata = {"name": nome_json, "parents": [id_subpasta]}
+    service.files().create(body=metadata, media_body=media, fields="id").execute()
+    print(f"✅ JSON IA salvo no Drive: {nome_json}")
+
+
+
+
 
 
 # Carrega o dicionário de arquétipos dominantes por questão
