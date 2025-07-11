@@ -137,10 +137,14 @@ def gerar_relatorio_json():
         empresa_id = buscar_id_pasta(empresa, PASTA_RAIZ)
         rodada_id = buscar_id_pasta(codrodada, empresa_id)
         lider_id = buscar_id_pasta(email_lider, rodada_id)
+        # 🔍 DEBUG TEMPORÁRIO — VERIFICAR SE ALGUM ID ESTÁ VINDO COMO None
+        print("🛠️ DEBUG - empresa_id:", empresa_id)
+        print("🛠️ DEBUG - rodada_id:", rodada_id)
+        print("🛠️ DEBUG - lider_id:", lider_id)
 
         if not lider_id:
             return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
-
+        
         # 🧹 Remove relatórios consolidados antigos antes de ler os arquivos
         antigos = service.files().list(
             q=f"'{lider_id}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType = 'application/json'",
