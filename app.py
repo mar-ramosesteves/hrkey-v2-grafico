@@ -122,6 +122,7 @@ def gerar_relatorio_json():
     try:
         dados = request.get_json()
         empresa = dados.get("empresa")
+        print("🔎 empresa recebida:", empresa)
         codrodada = dados.get("codrodada")
         email_lider = dados.get("emailLider")
 
