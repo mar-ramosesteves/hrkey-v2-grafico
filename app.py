@@ -134,13 +134,19 @@ def gerar_relatorio_json():
             arquivos = resultados.get('files', [])
             return arquivos[0]['id'] if arquivos else None
 
-        empresa_id = buscar_id_pasta(empresa, PASTA_RAIZ)
-        rodada_id = buscar_id_pasta(codrodada, empresa_id)
-        lider_id = buscar_id_pasta(email_lider, rodada_id)
-        # 🔍 DEBUG TEMPORÁRIO — VERIFICAR SE ALGUM ID ESTÁ VINDO COMO None
-        print("🛠️ DEBUG - empresa_id:", empresa_id)
-        print("🛠️ DEBUG - rodada_id:", rodada_id)
-        print("🛠️ DEBUG - lider_id:", lider_id)
+        try:
+            empresa_id = buscar_id_pasta(empresa, PASTA_RAIZ)
+            print("🧩 empresa_id:", empresa_id)
+        
+            rodada_id = buscar_id_pasta(codrodada, empresa_id)
+            print("🧩 rodada_id:", rodada_id)
+        
+            lider_id = buscar_id_pasta(email_lider, rodada_id)
+            print("🧩 lider_id:", lider_id)
+        except Exception as e:
+            print("❌ ERRO AO BUSCAR IDs:", str(e))
+            raise
+
 
         if not lider_id:
             return jsonify({"erro": f"Pasta do líder '{email_lider}' não encontrada."}), 404
