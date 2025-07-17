@@ -232,39 +232,48 @@ def gerar_graficos_comparativos():
         return response
 
     try:
+        print("✅ Recebendo chamada para gerar gráfico")
         dados = request.get_json()
         empresa = dados.get("empresa", "").strip().lower()
         codrodada = dados.get("codrodada", "").strip().lower()
         emailLider = dados.get("emailLider", "").strip().lower()
 
         if not all([empresa, codrodada, emailLider]):
+            print("❌ Dados incompletos")
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
         # Buscar JSON consolidado no Supabase
+        print("🔍 Buscando JSON no Supabase...")
         url = f"{os.environ['SUPABASE_REST_URL']}/consolidado_arquetipos?select=dados_json&empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emailLider}&order=data_criacao.desc&limit=1"
         headers = {
             "apikey": os.environ["SUPABASE_KEY"],
             "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}"
         }
         response = requests.get(url, headers=headers)
+        print("📦 Supabase respondeu:", response.status_code)
         if response.status_code != 200:
             return jsonify({"erro": f"Erro Supabase: {response.text}"}), 500
 
         resultados = response.json()
         if not resultados:
+            print("❌ Nenhum JSON encontrado")
             return jsonify({"erro": "Consolidado não encontrado no Supabase."}), 404
 
         json_data = resultados[0]["dados_json"]
+        print("✅ JSON carregado com sucesso")
 
         # Gerar gráfico e retornar imagem base64
+        print("🎨 Gerando gráfico...")
         imagem_base64 = gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
-
+        
+        print("✅ Gráfico gerado com sucesso e retornado ao cliente")
         return jsonify({
             "mensagem": "✅ Gráfico gerado com sucesso.",
             "grafico_base64": imagem_base64
         })
 
     except Exception as e:
+        print("❌ Erro durante execução:", str(e))
         return jsonify({"erro": str(e)}), 500
 
 def calcular_percentuais(respostas_dict):
