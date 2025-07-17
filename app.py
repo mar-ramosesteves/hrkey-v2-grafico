@@ -384,8 +384,10 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
             "autoavaliacao": pct_auto,
             "mediaEquipe": pct_equipes
         }
-        nome_base = nome_pdf.replace(".pdf", "")
-        salvar_json_ia_no_drive(dados_ia, nome_base, service, id_lider)
+        
+        nome_arquivo = f"IA_ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo)
+
 
 
 @app.route("/ver-arquetipos")
@@ -687,5 +689,37 @@ def salvar_json_ia_no_drive(dados, nome_base, service, id_lider):
         print(f"✅ JSON IA salvo no Drive: {nome_arquivo}")
     except Exception as e:
         print(f"❌ Erro ao salvar JSON IA: {str(e)}")
+
+
+import requests
+import os
+from datetime import datetime
+
+SUPABASE_URL = os.environ["SUPABASE_REST_URL"]
+SUPABASE_KEY = os.environ["SUPABASE_KEY"]
+
+def salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo):
+    url = f"{SUPABASE_URL}/consolidado_arquetipos"
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}"
+    }
+
+    payload = {
+        "empresa": empresa,
+        "codrodada": codrodada,
+        "emaillider": emailLider,
+        "dados_json": dados_ia,
+        "nome_arquivo": nome_arquivo,
+        "data_criacao": datetime.now().isoformat()
+    }
+
+    response = requests.post(url, headers=headers, json=payload, timeout=30)
+    if not response.ok:
+        print("❌ Erro ao salvar no Supabase:", response.status_code, response.text)
+    else:
+        print("✅ JSON do gráfico salvo no Supabase com sucesso.")
+
 
 
