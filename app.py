@@ -233,41 +233,36 @@ def gerar_graficos_comparativos():
 
     try:
         dados = request.get_json()
-        empresa = dados.get("empresa")
-        codrodada = dados.get("codrodada")
-        emailLider = dados.get("emailLider")
+        empresa = dados.get("empresa", "").strip().lower()
+        codrodada = dados.get("codrodada", "").strip().lower()
+        emailLider = dados.get("emailLider", "").strip().lower()
 
-        id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
-        id_rodada = garantir_pasta(codrodada, id_empresa)
-        id_lider = garantir_pasta(emailLider, id_rodada)
+        if not all([empresa, codrodada, emailLider]):
+            return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
-        arquivos_json = service.files().list(
-            q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
-            fields="files(id, name, createdTime)").execute().get("files", [])
+        # Buscar JSON consolidado no Supabase
+        url = f"{os.environ['SUPABASE_REST_URL']}/consolidado_arquetipos?select=dados_json&empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emailLider}&order=data_criacao.desc&limit=1"
+        headers = {
+            "apikey": os.environ["SUPABASE_KEY"],
+            "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}"
+        }
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            return jsonify({"erro": f"Erro Supabase: {response.text}"}), 500
 
-        arquivos_filtrados = [
-            f for f in arquivos_json
-            if emailLider.lower() in f["name"].lower() and codrodada.lower() in f["name"].lower()
-        ]
+        resultados = response.json()
+        if not resultados:
+            return jsonify({"erro": "Consolidado não encontrado no Supabase."}), 404
 
-        if not arquivos_filtrados:
-            return jsonify({"erro": "Arquivo de relatório consolidado não encontrado no Drive."}), 404
+        json_data = resultados[0]["dados_json"]
 
-        arquivo_alvo = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)[0]
-        file_id = arquivo_alvo["id"]
+        # Gerar gráfico e retornar imagem base64
+        imagem_base64 = gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
-        fh = io.BytesIO()
-        request_drive = service.files().get_media(fileId=file_id)
-        downloader = MediaIoBaseDownload(fh, request_drive)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-
-        json_data = json.loads(fh.getvalue().decode("utf-8"))
-
-        gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
-
-        return jsonify({"mensagem": "✅ PDF gerado com sucesso e salvo no Drive."})
+        return jsonify({
+            "mensagem": "✅ Gráfico gerado com sucesso.",
+            "grafico_base64": imagem_base64
+        })
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
@@ -319,6 +314,12 @@ def calcular_percentuais_equipes(lista_respostas):
         for a in arquetipos
     }
 
+import base64
+import io
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime
+
 def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
     respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
     respostas_equipes = json_data.get("avaliacoesEquipe", [])
@@ -349,44 +350,25 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     ax.legend()
     plt.tight_layout()
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        with PdfPages(tmp.name) as pdf:
-            pdf.savefig(fig)
+    # Salvar imagem como base64
+    buffer_png = io.BytesIO()
+    fig.savefig(buffer_png, format="png")
+    buffer_png.seek(0)
+    imagem_base64 = base64.b64encode(buffer_png.read()).decode("utf-8")
 
-        id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
-        id_rodada = garantir_pasta(codrodada, id_empresa)
-        id_lider = garantir_pasta(emailLider, id_rodada)
+    # Salvar JSON IA no Supabase
+    dados_ia = {
+        "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
+        "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
+        "n_avaliacoes": len(respostas_equipes),
+        "autoavaliacao": pct_auto,
+        "mediaEquipe": pct_equipes
+    }
 
-        nome_pdf = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
+    nome_arquivo = f"IA_ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo)
 
-        anteriores = service.files().list(
-            q=f"'{id_lider}' in parents and name = '{nome_pdf}' and trashed = false",
-            fields="files(id)").execute()
-        for arq in anteriores.get("files", []):
-            service.files().delete(fileId=arq["id"]).execute()
-
-        time.sleep(1)
-
-        file_metadata = {"name": nome_pdf, "parents": [id_lider]}
-        media = MediaFileUpload(tmp.name, mimetype="application/pdf", resumable=False)
-
-        try:
-            enviado = service.files().create(body=file_metadata, media_body=media, fields="id, name, parents").execute()
-            print(f"✅ PDF gerado e enviado com sucesso: {enviado['name']} | ID: {enviado['id']} | Pasta: {id_lider}")
-        except Exception as e:
-            print(f"❌ ERRO ao tentar salvar o PDF no Drive: {str(e)}")
-
-        # 🔁 Salvar JSON IA com os dados do gráfico na subpasta ia_json
-        dados_ia = {
-            "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
-            "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
-            "n_avaliacoes": len(respostas_equipes),
-            "autoavaliacao": pct_auto,
-            "mediaEquipe": pct_equipes
-        }
-        
-        nome_arquivo = f"IA_ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo)
+    return imagem_base64
 
 
 
