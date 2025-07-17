@@ -23,6 +23,17 @@ from reportlab.lib.units import cm
 import pandas as pd
 
 
+# ✅ Carrega a matriz de pontuação de arquétipos
+matriz = pd.read_excel("TABELA_ARQUETIPOS_COM_CHAVE.xlsx")
+
+# ✅ Lista de arquétipos reconhecidos na matriz
+arquetipos = ["Formador", "Resoluto", "Cuidativo", "Consultivo", "Imperativo", "Prescritivo"]
+
+# ✅ Lista de perguntas válidas
+perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
+
+
+
 def salvar_json_ia_no_drive(dados, nome_base, service, id_lider):
     from io import BytesIO
     import json
