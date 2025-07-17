@@ -243,152 +243,95 @@ def gerar_graficos_comparativos():
         return response
 
     try:
-        print("✅ Recebendo chamada para gerar gráfico")
+        import base64
+        from io import BytesIO
+
         dados = request.get_json()
         empresa = dados.get("empresa", "").strip().lower()
         codrodada = dados.get("codrodada", "").strip().lower()
         emailLider = dados.get("emailLider", "").strip().lower()
 
         if not all([empresa, codrodada, emailLider]):
-            print("❌ Dados incompletos")
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
-        # Buscar JSON consolidado no Supabase
-        print("🔍 Buscando JSON no Supabase...")
-        url = f"{os.environ['SUPABASE_REST_URL']}/consolidado_arquetipos?select=dados_json&empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emailLider}&order=data_criacao.desc&limit=1"
+        # 🔎 Buscar JSON consolidado no Supabase
+        url = f"{os.environ['SUPABASE_REST_URL']}/consolidado_arquetipos?empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emailLider}&select=dados_json&order=criado_em.desc&limit=1"
         headers = {
             "apikey": os.environ["SUPABASE_KEY"],
-            "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}"
+            "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}",
+            "Content-Type": "application/json"
         }
-        response = requests.get(url, headers=headers)
-        print("📦 Supabase respondeu:", response.status_code)
-        if response.status_code != 200:
-            return jsonify({"erro": f"Erro Supabase: {response.text}"}), 500
+        resp = requests.get(url, headers=headers)
+        resultado = resp.json()
 
-        resultados = response.json()
-        if not resultados:
-            print("❌ Nenhum JSON encontrado")
-            return jsonify({"erro": "Consolidado não encontrado no Supabase."}), 404
+        if not resultado:
+            return jsonify({"erro": "Nenhum consolidado encontrado no Supabase."}), 404
 
-        json_data = resultados[0]["dados_json"]
-        print("✅ JSON carregado com sucesso")
+        json_data = resultado[0]["dados_json"]
 
-        # Gerar gráfico e retornar imagem base64
-        print("🎨 Gerando gráfico...")
-        imagem_base64 = gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
-        
-        print("✅ Gráfico gerado com sucesso e retornado ao cliente")
-        return jsonify({
-            "mensagem": "✅ Gráfico gerado com sucesso.",
-            "grafico_base64": imagem_base64
-        })
+        # 🧠 Cálculo das pontuações por arquétipo
+        respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
+        respostas_equipes = json_data.get("avaliacoesEquipe", [])
+
+        pct_auto = calcular_percentuais(respostas_auto)
+        pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+
+        # 📊 Geração do gráfico
+        fig, ax = plt.subplots(figsize=(10, 6))
+        x = np.arange(len(arquetipos))
+        auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
+        equipe_vals = [pct_equipes.get(a, 0) for a in arquetipos]
+
+        ax.bar(x - 0.2, auto_vals, width=0.4, label="Autoavaliação", color='royalblue')
+        ax.bar(x + 0.2, equipe_vals, width=0.4, label="Média da Equipe", color='darkorange')
+
+        for i, (a, e) in enumerate(zip(auto_vals, equipe_vals)):
+            ax.text(i - 0.2, a + 1, f"{a:.1f}%", ha='center', fontsize=9)
+            ax.text(i + 0.2, e + 1, f"{e:.1f}%", ha='center', fontsize=9)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(arquetipos)
+        ax.set_ylim(0, 100)
+        ax.set_yticks(np.arange(0, 110, 10))
+        ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
+        ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
+        ax.set_ylabel("Pontuação (%)")
+        ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
+        ax.legend()
+        plt.tight_layout()
+
+        # 🎯 Salvar gráfico como imagem base64
+        buffer = BytesIO()
+        plt.savefig(buffer, format="png")
+        buffer.seek(0)
+        grafico_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+        plt.close()
+
+        # 💾 Salvar JSON com dados no Supabase
+        dados_ia = {
+            "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
+            "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
+            "n_avaliacoes": len(respostas_equipes),
+            "autoavaliacao": pct_auto,
+            "mediaEquipe": pct_equipes,
+            "grafico_base64": grafico_base64
+        }
+
+        salvar_url = f"{os.environ['SUPABASE_REST_URL']}/relatorios_arquetipos"
+        inserir = requests.post(salvar_url, json={
+            "empresa": empresa,
+            "codrodada": codrodada,
+            "emaillider": emailLider,
+            "dados_json": dados_ia
+        }, headers=headers)
+
+        if not inserir.ok:
+            return jsonify({"erro": "Erro ao salvar no Supabase"}), 500
+
+        return jsonify({"mensagem": "✅ Gráfico gerado e salvo no Supabase com sucesso."})
 
     except Exception as e:
-        print("❌ Erro durante execução:", str(e))
         return jsonify({"erro": str(e)}), 500
-
-def calcular_percentuais(respostas_dict):
-    total_por_arquetipo = {a: 0 for a in arquetipos}
-    max_por_arquetipo = {a: 0 for a in arquetipos}
-    for cod in perguntas:
-        try:
-            raw = respostas_dict.get(cod, 0)
-            nota = int(round(float(raw)))
-            if nota < 1 or nota > 6:
-                continue
-        except:
-            continue
-
-        for arq in arquetipos:
-            chave = f"{arq}{nota}{cod}"
-            linha = matriz[matriz["CHAVE"] == chave]
-            if not linha.empty:
-                pontos = linha["PONTOS_OBTIDOS"].values[0]
-                maximo = linha["PONTOS_MAXIMOS"].values[0]
-                total_por_arquetipo[arq] += pontos
-                max_por_arquetipo[arq] += maximo
-    return {
-        a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
-        for a in arquetipos
-    }
-
-def calcular_percentuais_equipes(lista_respostas):
-    totais_por_arquetipo = {a: 0 for a in arquetipos}
-    total_avaliacoes = 0
-
-    for resposta in lista_respostas:
-        respostas_dict = resposta.get("respostas", {})
-        if not respostas_dict:
-            continue
-
-        percentuais = calcular_percentuais(respostas_dict)
-        for arq in arquetipos:
-            totais_por_arquetipo[arq] += percentuais.get(arq, 0)
-        total_avaliacoes += 1
-
-    if total_avaliacoes == 0:
-        return {a: 0 for a in arquetipos}
-
-    return {
-        a: round(totais_por_arquetipo[a] / total_avaliacoes, 1)
-        for a in arquetipos
-    }
-
-import base64
-import io
-import matplotlib.pyplot as plt
-import numpy as np
-from datetime import datetime
-
-def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
-    respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
-    respostas_equipes = json_data.get("avaliacoesEquipe", [])
-
-    pct_auto = calcular_percentuais(respostas_auto)
-    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    x = np.arange(len(arquetipos))
-    auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
-    equipe_vals = [pct_equipes.get(a, 0) for a in arquetipos]
-
-    ax.bar(x - 0.2, auto_vals, width=0.4, label="Autoavaliação", color='royalblue')
-    ax.bar(x + 0.2, equipe_vals, width=0.4, label="Média da Equipe", color='darkorange')
-
-    for i, (a, e) in enumerate(zip(auto_vals, equipe_vals)):
-        ax.text(i - 0.2, a + 1, f"{a:.1f}%", ha='center', fontsize=9)
-        ax.text(i + 0.2, e + 1, f"{e:.1f}%", ha='center', fontsize=9)
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(arquetipos)
-    ax.set_ylim(0, 100)
-    ax.set_yticks(np.arange(0, 110, 10))
-    ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
-    ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
-    ax.set_ylabel("Pontuação (%)")
-    ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
-    ax.legend()
-    plt.tight_layout()
-
-    # Salvar imagem como base64
-    buffer_png = io.BytesIO()
-    fig.savefig(buffer_png, format="png")
-    buffer_png.seek(0)
-    imagem_base64 = base64.b64encode(buffer_png.read()).decode("utf-8")
-
-    # Salvar JSON IA no Supabase
-    dados_ia = {
-        "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
-        "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
-        "n_avaliacoes": len(respostas_equipes),
-        "autoavaliacao": pct_auto,
-        "mediaEquipe": pct_equipes
-    }
-
-    nome_arquivo = f"IA_ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo)
-
-    return imagem_base64
 
 
 
