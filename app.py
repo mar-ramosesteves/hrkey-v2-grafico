@@ -24,7 +24,7 @@ import pandas as pd
 
 
 # ✅ Carrega a matriz de pontuação de arquétipos
-matriz = pd.read_excel("TABELA_ARQUETIPOS_COM_CHAVE.xlsx")
+matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
 
 # ✅ Lista de arquétipos reconhecidos na matriz
 arquetipos = ["Formador", "Resoluto", "Cuidativo", "Consultivo", "Imperativo", "Prescritivo"]
