@@ -270,8 +270,12 @@ def gerar_graficos_comparativos():
         json_data = resultado[0]["dados_json"]
 
         # 🧠 Cálculo das pontuações por arquétipo
-        respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
-        respostas_equipes = json_data.get("avaliacoesEquipe", [])
+        respostas_auto = {k: v for k, v in json_data.get("autoavaliacao", {}).items() if k.startswith("Q")}
+        respostas_equipes = [
+            {k: v for k, v in avaliacao.items() if k.startswith("Q")}
+            for avaliacao in json_data.get("avaliacoesEquipe", [])
+        ]
+
 
         pct_auto = calcular_percentuais(respostas_auto)
         pct_equipes = calcular_percentuais_equipes(respostas_equipes)
