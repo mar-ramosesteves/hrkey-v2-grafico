@@ -237,53 +237,39 @@ def gerar_relatorio_json():
 def gerar_graficos_comparativos():
     if request.method == "OPTIONS":
         response = jsonify({'status': 'CORS preflight OK'})
-        response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
+        response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
         response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
         return response
 
     try:
-        import base64
-        from io import BytesIO
-
         dados = request.get_json()
         empresa = dados.get("empresa", "").strip().lower()
         codrodada = dados.get("codrodada", "").strip().lower()
         emailLider = dados.get("emailLider", "").strip().lower()
 
-        if not all([empresa, codrodada, emailLider]):
-            return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
-
-        # 🔎 Buscar JSON consolidado no Supabase
-        url = f"{os.environ['SUPABASE_REST_URL']}/consolidado_arquetipos?empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emailLider}&select=dados_json&order=criado_em.desc&limit=1"
+        # 🔁 Buscar JSON consolidado no Supabase
+        url = f"{SUPABASE_REST_URL}/consolidado_arquetipos?empresa=eq.{empresa}&codrodada=eq.{codrodada}&emailLider=eq.{emailLider}&order=criado_em.desc&limit=1"
         headers = {
-            "apikey": os.environ["SUPABASE_KEY"],
-            "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}",
+            "apikey": SUPABASE_API_KEY,
+            "Authorization": f"Bearer {SUPABASE_API_KEY}",
             "Content-Type": "application/json"
         }
-        resp = requests.get(url, headers=headers)
-        resultado = resp.json()
+        response = requests.get(url, headers=headers)
+        registros = response.json()
+        if not registros:
+            return jsonify({"erro": "Consolidado não encontrado no Supabase."}), 404
 
-        if not resultado:
-            return jsonify({"erro": "Nenhum consolidado encontrado no Supabase."}), 404
+        consolidado = registros[0]
+        json_data = consolidado["dados_json"]
 
-        json_data = resultado[0]["dados_json"]
-
-        # 🧠 Cálculo das pontuações por arquétipo
-        respostas_auto = {k: v for k, v in json_data.get("autoavaliacao", {}).items() if k.startswith("Q")}
-        respostas_equipes = [
-            {k: v for k, v in avaliacao.items() if k.startswith("Q")}
-            for avaliacao in json_data.get("avaliacoesEquipe", [])
-        ]
-
-        print("RESPOSTAS AUTO:", respostas_auto)
-        print("RESPOSTAS EQUIPE:", respostas_equipes)
-
+        respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
+        respostas_equipes = json_data.get("avaliacoesEquipe", [])
 
         pct_auto = calcular_percentuais(respostas_auto)
         pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
-        # 📊 Geração do gráfico
+        # 🔁 Gerar gráfico
         fig, ax = plt.subplots(figsize=(10, 6))
         x = np.arange(len(arquetipos))
         auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
@@ -291,7 +277,6 @@ def gerar_graficos_comparativos():
 
         ax.bar(x - 0.2, auto_vals, width=0.4, label="Autoavaliação", color='royalblue')
         ax.bar(x + 0.2, equipe_vals, width=0.4, label="Média da Equipe", color='darkorange')
-
         for i, (a, e) in enumerate(zip(auto_vals, equipe_vals)):
             ax.text(i - 0.2, a + 1, f"{a:.1f}%", ha='center', fontsize=9)
             ax.text(i + 0.2, e + 1, f"{e:.1f}%", ha='center', fontsize=9)
@@ -307,35 +292,34 @@ def gerar_graficos_comparativos():
         ax.legend()
         plt.tight_layout()
 
-        # 🎯 Salvar gráfico como imagem base64
-        buffer = BytesIO()
-        plt.savefig(buffer, format="png")
-        buffer.seek(0)
-        grafico_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+        # 🔁 Salvar imagem em disco temporário
+        img_buffer = io.BytesIO()
+        plt.savefig(img_buffer, format="png")
+        img_buffer.seek(0)
+        img_base64 = base64.b64encode(img_buffer.read()).decode("utf-8")
         plt.close()
 
-        # 💾 Salvar JSON com dados no Supabase
-        dados_ia = {
+        # 🔁 Salvar JSON no Supabase
+        dados_grafico = {
             "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
             "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
             "n_avaliacoes": len(respostas_equipes),
             "autoavaliacao": pct_auto,
             "mediaEquipe": pct_equipes,
-            "grafico_base64": grafico_base64
-        }
-
-        salvar_url = f"{os.environ['SUPABASE_REST_URL']}/relatorios_arquetipos"
-        inserir = requests.post(salvar_url, json={
             "empresa": empresa,
             "codrodada": codrodada,
-            "emaillider": emailLider,
-            "dados_json": dados_ia
-        }, headers=headers)
+            "emailLider": emailLider,
+            "data_criacao": datetime.now().isoformat(),
+            "nome_arquivo": f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.png"
+        }
 
-        if not inserir.ok:
-            return jsonify({"erro": "Erro ao salvar no Supabase"}), 500
+        requests.post(
+            f"{SUPABASE_REST_URL}/consolidado_arquetipos",
+            headers=headers,
+            data=json.dumps(dados_grafico)
+        )
 
-        return jsonify({"mensagem": "✅ Gráfico gerado e salvo no Supabase com sucesso."})
+        return jsonify({"mensagem": "✅ Gráfico gerado com sucesso.", "imagem_base64": img_base64})
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
