@@ -255,8 +255,8 @@ def gerar_graficos_comparativos():
         # 🔁 Buscar JSON consolidado no Supabase
         url = f"{SUPABASE_REST_URL}/consolidado_arquetipos?empresa=eq.{empresa}&codrodada=eq.{codrodada}&emailLider=eq.{emailLider}&order=criado_em.desc&limit=1"
         headers = {
-            "apikey": SUPABASE_API_KEY,
-            "Authorization": f"Bearer {SUPABASE_API_KEY}",
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
             "Content-Type": "application/json"
         }
         response = requests.get(url, headers=headers)
@@ -303,7 +303,7 @@ def gerar_graficos_comparativos():
         img_base64 = base64.b64encode(img_buffer.read()).decode("utf-8")
         plt.close()
 
-        # 🔁 Salvar JSON no Supabase
+        # 📄 Salvar dados do gráfico (em formato JSON) no Supabase
         dados_grafico = {
             "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
             "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
