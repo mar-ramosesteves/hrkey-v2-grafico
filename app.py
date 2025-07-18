@@ -240,169 +240,184 @@ def gerar_relatorio_json():
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import io
-import base64
-import json
 import os
+import json
+import tempfile
+import time
 from datetime import datetime
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+import pandas as pd
 import requests
 
-SUPABASE_URL = os.environ.get("SUPABASE_REST_URL")
-SUPABASE_TABLE = "consolidado_arquetipos"
+app = Flask(__name__)
+CORS(app, origins=["https://gestor.thehrkey.tech"])
+
+# Carrega a matriz e as perguntas
+matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
+arquetipos = sorted(list(set([a[:3] for a in matriz.columns if len(a) == 6 and a[3:].isdigit()])))
+
+# Variáveis de ambiente Supabase
+SUPABASE_URL = os.getenv("SUPABASE_REST_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+TABELA_CONSOLIDADO = "consolidado_arquetipos"
+
 
 @app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
-def gerar_graficos_comparativos():
+def gerar_grafico_comparativo():
     if request.method == "OPTIONS":
         response = jsonify({'status': 'CORS preflight OK'})
-        response.headers["Access-Control-Allow-Origin"] = "https://gestor.thehrkey.tech"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        response.headers.add("Access-Control-Allow-Origin", "https://gestor.thehrkey.tech")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         return response
 
     try:
         dados = request.get_json()
-        empresa = dados.get("empresa")
-        codrodada = dados.get("codrodada")
-        emailLider = dados.get("emailLider")
+        empresa = dados.get("empresa", "").strip().lower()
+        codrodada = dados.get("codrodada", "").strip().lower()
+        emailLider = dados.get("emailLider", "").strip().lower()
 
-        # 🔎 Buscar consolidado no Supabase
-        filtro = f"empresa=eq.{empresa}&codrodada=eq.{codrodada}&emailLider=eq.{emailLider}"
-        url = f"{SUPABASE_URL}/{SUPABASE_TABLE}?{filtro}&order=criado_em.desc&limit=1"
-
+        # Busca JSON consolidado no Supabase
         headers = {
-            "apikey": os.environ.get("SUPABASE_ANON_KEY"),
-            "Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
             "Content-Type": "application/json"
         }
+        filtro = f"empresa=eq.{empresa}&codrodada=eq.{codrodada}&emailLider=eq.{emailLider}"
+        url = f"{SUPABASE_URL}/{TABELA_CONSOLIDADO}?{filtro}"
+        resposta = requests.get(url, headers=headers)
+        registros = resposta.json()
 
-        r = requests.get(url, headers=headers)
-        if r.status_code != 200 or not r.json():
+        if not registros:
             return jsonify({"erro": "❌ Consolidado não encontrado no Supabase."}), 404
 
-        consolidado = r.json()[0]
-        json_data = json.loads(consolidado.get("dados_json", "{}"))
+        json_data = registros[0]["dados_json"]
 
-        # 🔁 Calcular percentuais
-        respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
-        respostas_equipes = json_data.get("avaliacoesEquipe", [])
+        imagem = gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
-        matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
-        arquetipos = matriz["ARQUETIPO"].unique().tolist()
-        perguntas = matriz["COD_AFIRMACAO"].unique().tolist()
-
-        def calcular_percentuais(respostas_dict):
-            total_por_arquetipo = {a: 0 for a in arquetipos}
-            max_por_arquetipo = {a: 0 for a in arquetipos}
-            for cod in perguntas:
-                try:
-                    raw = respostas_dict.get(cod, 0)
-                    nota = int(round(float(raw)))
-                    if nota < 1 or nota > 6:
-                        continue
-                except:
-                    continue
-                for arq in arquetipos:
-                    chave = f"{arq}{nota}{cod}"
-                    linha = matriz[matriz["CHAVE"] == chave]
-                    if not linha.empty:
-                        pontos = linha["PONTOS_OBTIDOS"].values[0]
-                        maximo = linha["PONTOS_MAXIMOS"].values[0]
-                        total_por_arquetipo[arq] += pontos
-                        max_por_arquetipo[arq] += maximo
-            return {
-                a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
-                for a in arquetipos
-            }
-
-        def calcular_percentuais_equipes(lista_respostas):
-            totais_por_arquetipo = {a: 0 for a in arquetipos}
-            total_avaliacoes = 0
-            for resposta in lista_respostas:
-                respostas_dict = resposta.get("respostas", {})
-                if not respostas_dict:
-                    continue
-                percentuais = calcular_percentuais(respostas_dict)
-                for arq in arquetipos:
-                    totais_por_arquetipo[arq] += percentuais.get(arq, 0)
-                total_avaliacoes += 1
-            if total_avaliacoes == 0:
-                return {a: 0 for a in arquetipos}
-            return {
-                a: round(totais_por_arquetipo[a] / total_avaliacoes, 1)
-                for a in arquetipos
-            }
-
-        pct_auto = calcular_percentuais(respostas_auto)
-        pct_equipes = calcular_percentuais_equipes(respostas_equipes)
-
-        # 🎯 Criar gráfico PNG
-        fig, ax = plt.subplots(figsize=(10, 6))
-        x = np.arange(len(arquetipos))
-        auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
-        equipe_vals = [pct_equipes.get(a, 0) for a in arquetipos]
-
-        ax.bar(x - 0.2, auto_vals, width=0.4, label="Autoavaliação", color='royalblue')
-        ax.bar(x + 0.2, equipe_vals, width=0.4, label="Média da Equipe", color='darkorange')
-
-        for i, (a, e) in enumerate(zip(auto_vals, equipe_vals)):
-            ax.text(i - 0.2, a + 1, f"{a:.1f}%", ha='center', fontsize=9)
-            ax.text(i + 0.2, e + 1, f"{e:.1f}%", ha='center', fontsize=9)
-
-        ax.set_xticks(x)
-        ax.set_xticklabels(arquetipos)
-        ax.set_ylim(0, 100)
-        ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
-        ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
-        ax.set_ylabel("Pontuação (%)")
-        ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
-        ax.legend()
-        plt.tight_layout()
-
-        # Salvar em buffer PNG
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png")
-        buf.seek(0)
-        image_base64 = base64.b64encode(buf.read()).decode("utf-8")
-        buf.close()
-        plt.close(fig)
-
-        # 🔁 Salvar JSON IA no Supabase
-        dados_ia = {
-            "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
-            "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
-            "n_avaliacoes": len(respostas_equipes),
-            "autoavaliacao": pct_auto,
-            "mediaEquipe": pct_equipes
-        }
-
-        salvar_json_supabase(empresa, codrodada, emailLider, dados_ia)
-
-        return jsonify({"mensagem": "✅ Gráfico gerado com sucesso!", "grafico_base64": image_base64})
+        return send_file(imagem, mimetype='image/png')
 
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
 
-def salvar_json_supabase(empresa, codrodada, emailLider, dados_ia):
-    try:
-        url = f"{SUPABASE_URL}/consolidado_arquetipos"
-        payload = {
-            "empresa": empresa,
-            "codrodada": codrodada,
-            "emailLider": emailLider,
-            "dados_json": json.dumps(dados_ia),
-            "data_criacao": datetime.now().isoformat()
-        }
-        headers = {
-            "apikey": os.environ.get("SUPABASE_ANON_KEY"),
-            "Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
-            "Content-Type": "application/json"
-        }
-        requests.post(url, headers=headers, data=json.dumps(payload))
-    except Exception as e:
-        print(f"Erro ao salvar JSON IA no Supabase: {e}")
+def calcular_percentuais(respostas_dict):
+    total_por_arquetipo = {a: 0 for a in arquetipos}
+    max_por_arquetipo = {a: 0 for a in arquetipos}
+    for cod in perguntas:
+        try:
+            raw = respostas_dict.get(cod, 0)
+            nota = int(round(float(raw)))
+            if nota < 1 or nota > 6:
+                continue
+        except:
+            continue
+
+        for arq in arquetipos:
+            chave = f"{arq}{nota}{cod}"
+            linha = matriz[matriz["CHAVE"] == chave]
+            if not linha.empty:
+                pontos = linha["PONTOS_OBTIDOS"].values[0]
+                maximo = linha["PONTOS_MAXIMOS"].values[0]
+                total_por_arquetipo[arq] += pontos
+                max_por_arquetipo[arq] += maximo
+
+    return {
+        a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
+        for a in arquetipos
+    }
+
+
+def calcular_percentuais_equipes(lista_respostas):
+    totais_por_arquetipo = {a: 0 for a in arquetipos}
+    total_avaliacoes = 0
+
+    for resposta in lista_respostas:
+        respostas_dict = resposta.get("respostas", {})
+        if not respostas_dict:
+            continue
+
+        percentuais = calcular_percentuais(respostas_dict)
+        for arq in arquetipos:
+            totais_por_arquetipo[arq] += percentuais.get(arq, 0)
+        total_avaliacoes += 1
+
+    if total_avaliacoes == 0:
+        return {a: 0 for a in arquetipos}
+
+    return {
+        a: round(totais_por_arquetipo[a] / total_avaliacoes, 1)
+        for a in arquetipos
+    }
+
+
+def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
+    respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
+    respostas_equipes = json_data.get("avaliacoesEquipe", [])
+
+    pct_auto = calcular_percentuais(respostas_auto)
+    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x = np.arange(len(arquetipos))
+    auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
+    equipe_vals = [pct_equipes.get(a, 0) for a in arquetipos]
+
+    ax.bar(x - 0.2, auto_vals, width=0.4, label="Autoavaliação", color='royalblue')
+    ax.bar(x + 0.2, equipe_vals, width=0.4, label="Média da Equipe", color='darkorange')
+
+    for i, (a, e) in enumerate(zip(auto_vals, equipe_vals)):
+        ax.text(i - 0.2, a + 1, f"{a:.1f}%", ha='center', fontsize=9)
+        ax.text(i + 0.2, e + 1, f"{e:.1f}%", ha='center', fontsize=9)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(arquetipos)
+    ax.set_ylim(0, 100)
+    ax.set_yticks(np.arange(0, 110, 10))
+    ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
+    ax.axhline(50, color='gray', linestyle=':", label="Suporte (50%)")
+    ax.set_ylabel("Pontuação (%)")
+    ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
+    ax.legend()
+    plt.tight_layout()
+
+    # Converte imagem para PNG na memória
+    img_io = io.BytesIO()
+    plt.savefig(img_io, format='png')
+    img_io.seek(0)
+
+    # Salvar JSON com dados do gráfico no Supabase
+    dados_ia = {
+        "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
+        "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
+        "n_avaliacoes": len(respostas_equipes),
+        "autoavaliacao": pct_auto,
+        "mediaEquipe": pct_equipes
+    }
+    salvar_json_no_supabase(dados_ia, empresa, codrodada, emailLider)
+
+    return img_io
+
+
+def salvar_json_no_supabase(dados_json, empresa, codrodada, emailLider):
+    url = f"{SUPABASE_URL}/{TABELA_CONSOLIDADO}"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "empresa": empresa,
+        "codrodada": codrodada,
+        "emailLider": emailLider,
+        "data_criacao": datetime.now().isoformat(),
+        "dados_json": dados_json,
+        "nome_arquivo": f"IA_ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.json"
+    }
+    requests.post(url, headers=headers, data=json.dumps(payload))
 
 
 
