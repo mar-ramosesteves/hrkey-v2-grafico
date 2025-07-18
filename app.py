@@ -21,6 +21,10 @@ import json
 from math import pi
 from reportlab.lib.units import cm
 import pandas as pd
+import os
+
+SUPABASE_REST_URL = os.getenv("SUPABASE_REST_URL")
+SUPABASE_API_KEY = os.getenv("SUPABASE_KEY")
 
 
 # ✅ Carrega a matriz de pontuação de arquétipos
