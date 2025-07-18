@@ -276,6 +276,9 @@ def gerar_graficos_comparativos():
             for avaliacao in json_data.get("avaliacoesEquipe", [])
         ]
 
+        print("RESPOSTAS AUTO:", respostas_auto)
+        print("RESPOSTAS EQUIPE:", respostas_equipes)
+
 
         pct_auto = calcular_percentuais(respostas_auto)
         pct_equipes = calcular_percentuais_equipes(respostas_equipes)
