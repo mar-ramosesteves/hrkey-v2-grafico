@@ -419,7 +419,8 @@ def salvar_json_no_supabase(dados_json, empresa, codrodada, emailLider):
         "nome_arquivo": f"IA_ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.json"
     }
     requests.post(url, headers=headers, data=json.dumps(payload))
-
+    
+    return jsonify({"mensagem": "✅ Gráfico gerado, exibido na tela e JSON salvo no Supabase com sucesso."})
 
 
 @app.route("/ver-arquetipos")
