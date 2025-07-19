@@ -412,7 +412,9 @@ def gerar_graficos_comparativos():
 
         
     except Exception as e:
+        print(f"❌ Erro na geração do gráfico comparativo: {str(e)}")
         return jsonify({"erro": str(e)}), 500
+
 
 
 @app.route("/ver-arquetipos")
