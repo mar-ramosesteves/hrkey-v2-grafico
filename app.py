@@ -325,6 +325,10 @@ def gerar_graficos_comparativos():
                         maximo = linha["PONTOS_MAXIMOS"].values[0]
                         total_por_arquetipo[arq] += pontos
                         max_por_arquetipo[arq] += maximo
+
+                    else:
+                        print(f"❌ Chave não encontrada na matriz: {chave}")
+
             return {
                 a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
                 for a in arquetipos
