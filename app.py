@@ -404,12 +404,7 @@ def gerar_graficos_comparativos():
             "arquivo_pdf_base64": pdf_base64
         }
 
-        # 🔁 Envia gráfico + JSON IA para Supabase
-        salvar_url = f"{os.environ['SUPABASE_REST_URL']}/consolidado_arquetipos"
-        salvar = requests.post(salvar_url, headers=headers, data=json.dumps(payload))
-
-        return jsonify({"mensagem": "✅ Gráfico e JSON IA salvos no Supabase com sucesso."})
-
+        
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
