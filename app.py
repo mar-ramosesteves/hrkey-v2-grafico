@@ -29,6 +29,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 # ✅ Carrega a matriz de pontuação de arquétipos
 matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+print("📄 Matriz com chave carregada. Total de linhas:", len(matriz))
 
 # ✅ Lista de arquétipos reconhecidos na matriz
 arquetipos = ["Formador", "Resoluto", "Cuidativo", "Consultivo", "Imperativo", "Prescritivo"]
@@ -303,6 +304,13 @@ def gerar_graficos_comparativos():
             return jsonify({"erro": "JSON consolidado não encontrado no Supabase"}), 404
 
         json_data = registros[0]["dados_json"]
+
+
+        print("🚀 Chamando calcular_percentuais para autoavaliação...")
+        pct_auto = calcular_percentuais(respostas_auto)
+        
+        print("🚀 Chamando calcular_percentuais_equipes para equipe...")
+        pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
         # === Funções de cálculo ===
         def calcular_percentuais(respostas_dict):
