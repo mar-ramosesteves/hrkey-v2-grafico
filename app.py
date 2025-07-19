@@ -404,6 +404,12 @@ def gerar_graficos_comparativos():
             "arquivo_pdf_base64": pdf_base64
         }
 
+        # Salva JSON IA no Supabase
+        salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo)
+        
+        # Retorno final para o front-end
+        return jsonify({"mensagem": "✅ Gráfico e JSON IA salvos no Supabase com sucesso."})
+
         
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
