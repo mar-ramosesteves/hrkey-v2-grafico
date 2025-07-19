@@ -281,11 +281,15 @@ def gerar_graficos_comparativos():
         from matplotlib.backends.backend_pdf import PdfPages
         from datetime import datetime
 
+        print("🟢 Início da rota /gerar-graficos-comparativos")
+
         dados = request.get_json()
+        print("📥 Dados recebidos no POST:", dados)
         empresa = dados.get("empresa", "").strip().lower()
         codrodada = dados.get("codrodada", "").strip().lower()
         emailLider = dados.get("emailLider", "").strip().lower()
-
+        print(f"📌 Variáveis extraídas: empresa={empresa}, codrodada={codrodada}, emailLider={emailLider}")
+        
         # Buscar JSON consolidado no Supabase
         url = f"{os.environ['SUPABASE_REST_URL']}/consolidado_arquetipos"
         params = {
@@ -298,6 +302,9 @@ def gerar_graficos_comparativos():
             "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}"
         }
         response = requests.get(url, headers=headers, params=params)
+        print("📡 Requisição feita ao Supabase.")
+        print("📦 Status da resposta:", resposta.status_code)
+        print("📦 Conteúdo da resposta:", resposta.text)
 
         registros = response.json()
         if not registros:
