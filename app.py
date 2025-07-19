@@ -318,6 +318,7 @@ def gerar_graficos_comparativos():
                     continue
                 for arq in arquetipos:
                     chave = f"{arq}{nota}{cod}"
+                    print(f"🔑 Chave gerada: {chave}")
                     linha = matriz[matriz["CHAVE"] == chave]
                     if not linha.empty:
                         pontos = linha["PONTOS_OBTIDOS"].values[0]
