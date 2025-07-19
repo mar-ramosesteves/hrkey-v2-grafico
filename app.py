@@ -24,7 +24,7 @@ import pandas as pd
 import os
 
 SUPABASE_REST_URL = os.getenv("SUPABASE_REST_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 
 # ✅ Carrega a matriz de pontuação de arquétipos
@@ -293,7 +293,7 @@ def gerar_graficos_comparativos():
             "emailLider": f"eq.{emailLider}"
         }
         headers = {
-            "apikey": os.environ["SUPABASE_API_KEY"],
+            "apikey": os.environ["SUPABASE_KEY"],
             "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}"
         }
         response = requests.get(url, headers=headers, params=params)
