@@ -15,6 +15,7 @@ import tempfile
 import numpy as np
 import re
 import time
+import base64
 
 import json
 
