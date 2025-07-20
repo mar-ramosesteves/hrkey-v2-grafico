@@ -370,6 +370,11 @@ def gerar_graficos_comparativos():
         # === Extrair dados antes de usar ===
         respostas_auto = json_data.get("autoavaliacao", {})
         respostas_equipes = json_data.get("avaliacoesEquipe", [])
+        print("🧐 respostas_auto:", respostas_auto)
+        print("🧐 respostas_equipes:", respostas_equipes)
+
+
+
         
         print("🚀 Chamando calcular_percentuais para autoavaliação...")
         pct_auto = calcular_percentuais(respostas_auto)
