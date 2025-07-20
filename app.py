@@ -25,30 +25,49 @@ import os
 
 
 
-def calcular_percentuais(estrutura_matriz, respostas):
-    resultados = {}
-    for bloco, chaves in estrutura_matriz.items():
-        pontos_totais = {chave: 0 for chave in chaves}
-        total_respostas = {chave: 0 for chave in chaves}
+# === Funções de cálculo ===
+def calcular_percentuais(respostas_dict):
+    total_por_arquetipo = {a: 0 for a in arquetipos}
+    max_por_arquetipo = {a: 0 for a in arquetipos}
+    for cod in perguntas:
+        try:
+            raw = respostas_dict.get(cod, 0)
+            nota = int(round(float(raw)))
+            if nota < 1 or nota > 6:
+                continue
+        except:
+            continue
+        for arq in arquetipos:
+            chave = f"{arq}{nota}{cod}"
+            print(f"🔑 Chave gerada: {chave}")
+            linha = matriz[matriz["CHAVE"] == chave]
+            if not linha.empty:
+                pontos = linha["PONTOS_OBTIDOS"].values[0]
+                maximo = linha["PONTOS_MAXIMOS"].values[0]
+                total_por_arquetipo[arq] += pontos
+                max_por_arquetipo[arq] += maximo
+            else:
+                print(f"❌ Chave não encontrada na matriz: {chave}")
 
-        for r in respostas:
-            for chave in chaves:
-                valor = r.get(chave)
-                if valor is not None:
-                    try:
-                        pontos_totais[chave] += int(valor)
-                        total_respostas[chave] += 1
-                    except:
-                        pass
+    return {
+        a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
+        for a in arquetipos
+    }
 
-        percentuais = {}
-        for chave in chaves:
-            if total_respostas[chave] > 0:
-                media = pontos_totais[chave] / total_respostas[chave]
-                percentuais[chave] = round(media * 100 / 6, 1)  # 6 é a nota máxima
-
-        resultados[bloco] = percentuais
-    return resultados
+def calcular_percentuais_equipes(lista_respostas):
+    totais_por_arquetipo = {a: 0 for a in arquetipos}
+    total_avaliacoes = 0
+    for resposta in lista_respostas:
+        percentuais = calcular_percentuais(resposta)
+        for arq in arquetipos:
+            totais_por_arquetipo[arq] += percentuais.get(arq, 0)
+        total_avaliacoes += 1
+    if total_avaliacoes == 0:
+        return {a: 0 for a in arquetipos}
+    return {
+        a: round(totais_por_arquetipo[a] / total_avaliacoes, 1)
+        for a in arquetipos
+    }
 
 
 SUPABASE_REST_URL = os.getenv("SUPABASE_REST_URL")
@@ -354,51 +373,8 @@ def gerar_graficos_comparativos():
         print("🚀 Chamando calcular_percentuais_equipes para equipe...")
         pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
-        # === Funções de cálculo ===
-        def calcular_percentuais(respostas_dict):
-            total_por_arquetipo = {a: 0 for a in arquetipos}
-            max_por_arquetipo = {a: 0 for a in arquetipos}
-            for cod in perguntas:
-                try:
-                    raw = respostas_dict.get(cod, 0)
-                    nota = int(round(float(raw)))
-                    if nota < 1 or nota > 6:
-                        continue
-                except:
-                    continue
-                for arq in arquetipos:
-                    chave = f"{arq}{nota}{cod}"
-                    print(f"🔑 Chave gerada: {chave}")
-                    linha = matriz[matriz["CHAVE"] == chave]
-                    if not linha.empty:
-                        pontos = linha["PONTOS_OBTIDOS"].values[0]
-                        maximo = linha["PONTOS_MAXIMOS"].values[0]
-                        total_por_arquetipo[arq] += pontos
-                        max_por_arquetipo[arq] += maximo
-
-                    else:
-                        print(f"❌ Chave não encontrada na matriz: {chave}")
-
-            return {
-                a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
-                for a in arquetipos
-            }
-
-        def calcular_percentuais_equipes(lista_respostas):
-            totais_por_arquetipo = {a: 0 for a in arquetipos}
-            total_avaliacoes = 0
-            for resposta in lista_respostas:
-                percentuais = calcular_percentuais(resposta)
-                for arq in arquetipos:
-                    totais_por_arquetipo[arq] += percentuais.get(arq, 0)
-                total_avaliacoes += 1
-            if total_avaliacoes == 0:
-                return {a: 0 for a in arquetipos}
-            return {
-                a: round(totais_por_arquetipo[a] / total_avaliacoes, 1)
-                for a in arquetipos
-            }
-
+        # === Funções de cálculo --->> as funções de cálculo estao logo abaixo dos import, no topo do app.py ===
+        
         # === Dados para o gráfico ===
         respostas_auto = json_data.get("autoavaliacao", {})
         respostas_equipes = json_data.get("avaliacoesEquipe", [])
