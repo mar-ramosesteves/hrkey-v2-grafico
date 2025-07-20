@@ -757,7 +757,7 @@ def salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_ar
     payload = {
         "empresa": empresa,
         "codrodada": codrodada,
-        "emaillider": emailLider,
+        "emailLider": emailLider,
         "dados_json": dados_ia,
         "nome_arquivo": nome_arquivo,
         "data_criacao": datetime.now().isoformat()
