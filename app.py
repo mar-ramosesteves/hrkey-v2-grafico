@@ -367,15 +367,20 @@ def gerar_graficos_comparativos():
         
         json_data = registros[0]["dados_json"]
         
-        # === Extrair dados antes de usar ===
-        respostas_auto = json_data.get("autoavaliacao", {})
-        respostas_equipes = json_data.get("avaliacoesEquipe", [])
-        print("🧐 respostas_auto:", respostas_auto)
-        print("🧐 respostas_equipes:", respostas_equipes)
-
-
-
+        respostas_brutas_auto = json_data.get("autoavaliacao", {})
+        respostas_brutas_equipes = json_data.get("avaliacoesEquipe", [])
         
+        print("🧐 respostas_brutas_auto:", respostas_brutas_auto)
+        print("🧐 respostas_brutas_equipes:", respostas_brutas_equipes)
+        
+        # 🔁 Converte Q01–Q49 em pontuação por arquétipo
+        respostas_auto = calcular_pontuacao_arquetipos(respostas_brutas_auto, matriz_chave)
+        respostas_equipes = calcular_pontuacao_equipes(respostas_brutas_equipes, matriz_chave)
+        
+        print("✅ respostas_auto convertidas:", respostas_auto)
+        print("✅ respostas_equipes convertidas:", respostas_equipes)
+        
+        # ✅ Agora sim, calcula os percentuais
         print("🚀 Chamando calcular_percentuais para autoavaliação...")
         pct_auto = calcular_percentuais(respostas_auto)
         
