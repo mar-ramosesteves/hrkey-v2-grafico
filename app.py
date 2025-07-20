@@ -266,6 +266,36 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 TABELA_CONSOLIDADO = "consolidado_arquetipos"
 
 
+
+def calcular_percentuais(estrutura_matriz, respostas):
+    resultados = {}
+    for bloco, chaves in estrutura_matriz.items():
+        pontos_totais = {chave: 0 for chave in chaves}
+        total_respostas = {chave: 0 for chave in chaves}
+
+        for r in respostas:
+            for chave in chaves:
+                valor = r.get(chave)
+                if valor is not None:
+                    try:
+                        pontos_totais[chave] += int(valor)
+                        total_respostas[chave] += 1
+                    except:
+                        pass
+
+        percentuais = {}
+        for chave in chaves:
+            if total_respostas[chave] > 0:
+                media = pontos_totais[chave] / total_respostas[chave]
+                percentuais[chave] = round(media * 100 / 6, 1)  # 6 é a nota máxima
+
+        resultados[bloco] = percentuais
+    return resultados
+
+
+
+
+
 @app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
 def gerar_graficos_comparativos():
     if request.method == "OPTIONS":
