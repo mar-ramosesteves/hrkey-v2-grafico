@@ -295,7 +295,7 @@ def gerar_graficos_comparativos():
         params = {
             "empresa": f"eq.{empresa}",
             "codrodada": f"eq.{codrodada}",
-            "emailLider": f"eq.{emailLider}"
+            "emaillider": f"eq.{emailLider}"
         }
         headers = {
             "apikey": os.environ["SUPABASE_KEY"],
