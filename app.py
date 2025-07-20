@@ -303,8 +303,9 @@ def gerar_graficos_comparativos():
         }
         response = requests.get(url, headers=headers, params=params)
         print("📡 Requisição feita ao Supabase.")
-        print("📦 Status da resposta:", resposta.status_code)
-        print("📦 Conteúdo da resposta:", resposta.text)
+        print("📦 Status da resposta:", response.status_code)
+        print("📦 Conteúdo da resposta:", response.text)
+
 
         registros = response.json()
         if not registros:
