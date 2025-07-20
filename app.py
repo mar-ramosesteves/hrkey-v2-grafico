@@ -363,23 +363,17 @@ def gerar_graficos_comparativos():
         registros = response.json()
         if not registros:
             return jsonify({"erro": "JSON consolidado não encontrado no Supabase"}), 404
-
+        
         json_data = registros[0]["dados_json"]
-
-
+        
+        # === Extrair dados antes de usar ===
+        respostas_auto = json_data.get("autoavaliacao", {})
+        respostas_equipes = json_data.get("avaliacoesEquipe", [])
+        
         print("🚀 Chamando calcular_percentuais para autoavaliação...")
         pct_auto = calcular_percentuais(respostas_auto)
         
         print("🚀 Chamando calcular_percentuais_equipes para equipe...")
-        pct_equipes = calcular_percentuais_equipes(respostas_equipes)
-
-        # === Funções de cálculo --->> as funções de cálculo estao logo abaixo dos import, no topo do app.py ===
-        
-        # === Dados para o gráfico ===
-        respostas_auto = json_data.get("autoavaliacao", {})
-        respostas_equipes = json_data.get("avaliacoesEquipe", [])
-
-        pct_auto = calcular_percentuais(respostas_auto)
         pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
         # === Gerar gráfico ===
