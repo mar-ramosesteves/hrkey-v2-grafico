@@ -32,53 +32,52 @@ import os
 
 
 def calcular_percentuais(respostas_dict):
+    print("📥 [DEBUG] Entrou em calcular_percentuais")
+    print("📥 [DEBUG] Total de respostas recebidas:", len(respostas_dict))
     total_por_arquetipo = {a: 0 for a in arquetipos}
     max_por_arquetipo = {a: 0 for a in arquetipos}
     for cod in perguntas:
+        raw = respostas_dict.get(cod, "")
         try:
+            nota = int(round(float(raw)))
+            if nota < 1 or nota > 6:
+                print(f"⚠️ Nota fora do intervalo ignorada: {nota} ({cod})")
+                continue
+            arq = perguntas[cod]
+            total_por_arquetipo[arq] += nota
+            max_por_arquetipo[arq] += 6
+        except Exception as e:
+            print(f"⚠️ Erro ao processar {cod}: {raw} → {e}")
+            continue
+    percentuais = {}
+    for arq in arquetipos:
+        if max_por_arquetipo[arq]:
+            percentuais[arq] = round((total_por_arquetipo[arq] / max_por_arquetipo[arq]) * 100, 1)
+    return percentuais
+
+def calcular_percentuais_equipes(lista_de_respostas):
+    print("📥 [DEBUG] Entrou em calcular_percentuais_equipes")
+    acumulado = {a: 0 for a in arquetipos}
+    maximo = {a: 0 for a in arquetipos}
+    for respostas_dict in lista_de_respostas:
+        for cod in perguntas:
             raw = respostas_dict.get(cod, "")
             try:
                 nota = int(round(float(raw)))
                 if nota < 1 or nota > 6:
+                    print(f"⚠️ Nota fora do intervalo ignorada: {nota} ({cod})")
                     continue
-            except:
-                print(f"⚠️ Nota inválida ignorada: {raw} ({cod})")
+                arq = perguntas[cod]
+                acumulado[arq] += nota
+                maximo[arq] += 6
+            except Exception as e:
+                print(f"⚠️ Erro ao processar equipe {cod}: {raw} → {e}")
                 continue
-
-        except:
-            continue
-        for arq in arquetipos:
-            chave = f"{arq}{nota}{cod}"
-            print(f"🔑 Chave gerada: {chave}")
-            linha = matriz[matriz["CHAVE"] == chave]
-            if not linha.empty:
-                pontos = linha["PONTOS_OBTIDOS"].values[0]
-                maximo = linha["PONTOS_MAXIMOS"].values[0]
-                total_por_arquetipo[arq] += pontos
-                max_por_arquetipo[arq] += maximo
-            else:
-                print(f"❌ Chave não encontrada na matriz: {chave}")
-
-    return {
-        a: round((total_por_arquetipo[a] / max_por_arquetipo[a]) * 100, 1) if max_por_arquetipo[a] > 0 else 0
-        for a in arquetipos
-    }
-
-def calcular_percentuais_equipes(lista_respostas):
-    totais_por_arquetipo = {a: 0 for a in arquetipos}
-    total_avaliacoes = 0
-    for resposta in lista_respostas:
-        percentuais = calcular_percentuais(resposta)
-        for arq in arquetipos:
-            totais_por_arquetipo[arq] += percentuais.get(arq, 0)
-        total_avaliacoes += 1
-    if total_avaliacoes == 0:
-        return {a: 0 for a in arquetipos}
-    return {
-        a: round(totais_por_arquetipo[a] / total_avaliacoes, 1)
-        for a in arquetipos
-    }
-
+    percentuais = {}
+    for arq in arquetipos:
+        if maximo[arq]:
+            percentuais[arq] = round((acumulado[arq] / maximo[arq]) * 100, 1)
+    return percentuais
 
 SUPABASE_REST_URL = os.getenv("SUPABASE_REST_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
