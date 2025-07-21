@@ -23,7 +23,7 @@ from math import pi
 from reportlab.lib.units import cm
 import pandas as pd
 import os
-from utils_chaves import calcular_pontuacao_arquetipos, calcular_pontuacao_equipes
+
 
 
 
