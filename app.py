@@ -462,7 +462,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     payload = {
         "empresa": empresa,
         "codrodada": codrodada,
-        "emailLider": emailLider,
+        "emaillider": emailLider,
         "data_criacao": datetime.utcnow().isoformat(),
         "dados_json": dados_ia,
         "nome_arquivo": nome_arquivo,
