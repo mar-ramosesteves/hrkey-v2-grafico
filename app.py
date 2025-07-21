@@ -33,10 +33,15 @@ def calcular_percentuais(respostas_dict):
     max_por_arquetipo = {a: 0 for a in arquetipos}
     for cod in perguntas:
         try:
-            raw = respostas_dict.get(cod, 0)
-            nota = int(round(float(raw)))
-            if nota < 1 or nota > 6:
+            raw = respostas_dict.get(cod, "")
+            try:
+                nota = int(round(float(raw)))
+                if nota < 1 or nota > 6:
+                    continue
+            except:
+                print(f"⚠️ Nota inválida ignorada: {raw} ({cod})")
                 continue
+
         except:
             continue
         for arq in arquetipos:
