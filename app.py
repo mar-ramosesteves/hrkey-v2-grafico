@@ -28,6 +28,9 @@ import os
 
 
 # === Funções de cálculo ===
+
+
+
 def calcular_percentuais(respostas_dict):
     total_por_arquetipo = {a: 0 for a in arquetipos}
     max_por_arquetipo = {a: 0 for a in arquetipos}
@@ -391,10 +394,17 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         avaliacao.get("respostas", {}) for avaliacao in json_data.get("avaliacoesEquipe", [])
     ]
     
+    # 🔍 Diagnóstico antes do cálculo
+    print("📄 Chaves em respostas_auto:", respostas_auto.keys())
+    print("📄 Q01 =", respostas_auto.get("Q01", "vazio"))
+    if respostas_equipes:
+        print("📄 Q01 (equipe) da 1ª pessoa =", respostas_equipes[0].get("Q01", "vazio"))
+    
+    # 📊 Cálculos
     pct_auto = calcular_percentuais(respostas_auto)
     pct_equipes = calcular_percentuais_equipes(respostas_equipes)
-
-
+    
+    # ✅ Verificação final
     print("📊 Percentuais AUTO:", pct_auto)
     print("📊 Percentuais EQUIPE:", pct_equipes)
     print("🖨️ Gerando gráfico...")
