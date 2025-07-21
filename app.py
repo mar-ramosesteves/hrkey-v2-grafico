@@ -331,126 +331,135 @@ def gerar_graficos_comparativos():
         return response
 
     try:
-        import numpy as np
-        import tempfile
-        from matplotlib.backends.backend_pdf import PdfPages
+        import requests
         from datetime import datetime
 
-        print("🟢 Início da rota /gerar-graficos-comparativos")
-
         dados = request.get_json()
-        print("📥 Dados recebidos no POST:", dados)
-        empresa = dados.get("empresa", "").strip().lower()
-        codrodada = dados.get("codrodada", "").strip().lower()
-        emailLider = dados.get("emailLider", "").strip().lower()
-        print(f"📌 Variáveis extraídas: empresa={empresa}, codrodada={codrodada}, emailLider={emailLider}")
-        
-        # Buscar JSON consolidado no Supabase
-        url = f"{os.environ['SUPABASE_REST_URL']}/consolidado_arquetipos"
-        params = {
-            "empresa": f"eq.{empresa}",
-            "codrodada": f"eq.{codrodada}",
-            "emaillider": f"eq.{emailLider}"
-        }
+        empresa = dados.get("empresa")
+        codrodada = dados.get("codrodada")
+        emailLider = dados.get("emailLider")
+        print("📥 Dados recebidos:", empresa, codrodada, emailLider)
+
+        SUPABASE_URL = os.environ.get("SUPABASE_REST_URL")
+        SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
         headers = {
-            "apikey": os.environ["SUPABASE_KEY"],
-            "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}"
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json"
         }
-        response = requests.get(url, headers=headers, params=params)
-        print("📡 Requisição feita ao Supabase.")
-        print("📦 Status da resposta:", response.status_code)
-        print("📦 Conteúdo da resposta:", response.text)
 
+        filtro = f"?empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emailLider}&select=dados_json"
+        url = f"{SUPABASE_URL}/consolidado_arquetipos{filtro}"
+        print("🔎 Buscando consolidado no Supabase:", url)
 
-        registros = response.json()
-        if not registros:
-            return jsonify({"erro": "JSON consolidado não encontrado no Supabase"}), 404
-        
+        resp = requests.get(url, headers=headers)
+        registros = resp.json()
+
+        if not registros or "dados_json" not in registros[0]:
+            print("❌ Consolidado não encontrado ou formato inválido.")
+            return jsonify({"erro": "Consolidado não encontrado no Supabase."}), 404
+
         json_data = registros[0]["dados_json"]
-        
-        respostas_brutas_auto = json_data.get("autoavaliacao", {})
-        respostas_brutas_equipes = json_data.get("avaliacoesEquipe", [])
-        
-        print("🧐 respostas_brutas_auto:", respostas_brutas_auto)
-        print("🧐 respostas_brutas_equipes:", respostas_brutas_equipes)
-        
-        # 🔁 Converte Q01–Q49 em pontuação por arquétipo
-        respostas_auto = calcular_pontuacao_arquetipos(respostas_brutas_auto, matriz_chave)
-        respostas_equipes = calcular_pontuacao_equipes(respostas_brutas_equipes, matriz_chave)
-        
-        print("✅ respostas_auto convertidas:", respostas_auto)
-        print("✅ respostas_equipes convertidas:", respostas_equipes)
-        
-        # ✅ Agora sim, calcula os percentuais
-        print("🚀 Chamando calcular_percentuais para autoavaliação...")
-        pct_auto = calcular_percentuais(respostas_auto)
-        
-        print("🚀 Chamando calcular_percentuais_equipes para equipe...")
-        pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+        print("📄 Consolidado encontrado. Chaves:", list(json_data.keys()))
 
-        # === Gerar gráfico ===
-        fig, ax = plt.subplots(figsize=(10, 6))
-        x = np.arange(len(arquetipos))
-        auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
-        equipe_vals = [pct_equipes.get(a, 0) for a in arquetipos]
+        gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
-        ax.bar(x - 0.2, auto_vals, width=0.4, label="Autoavaliação", color='royalblue')
-        ax.bar(x + 0.2, equipe_vals, width=0.4, label="Média da Equipe", color='darkorange')
+        return jsonify({"mensagem": "✅ PDF e JSON gerados com sucesso e salvos no Supabase."})
 
-        for i, (a, e) in enumerate(zip(auto_vals, equipe_vals)):
-            ax.text(i - 0.2, a + 1, f"{a:.1f}%", ha='center', fontsize=9)
-            ax.text(i + 0.2, e + 1, f"{e:.1f}%", ha='center', fontsize=9)
-
-        ax.set_xticks(x)
-        ax.set_xticklabels(arquetipos)
-        ax.set_ylim(0, 100)
-        ax.set_yticks(np.arange(0, 110, 10))
-        ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
-        ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
-        ax.set_ylabel("Pontuação (%)")
-        ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
-        ax.legend()
-        plt.tight_layout()
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            with PdfPages(tmp.name) as pdf:
-                pdf.savefig(fig)
-
-            # === Enviar PDF para Supabase ===
-            nome_arquivo = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
-            with open(tmp.name, "rb") as f:
-                pdf_bytes = f.read()
-            pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
-
-        # === JSON IA a ser salvo ===
-        dados_ia = {
-            "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
-            "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
-            "n_avaliacoes": len(respostas_equipes),
-            "autoavaliacao": pct_auto,
-            "mediaEquipe": pct_equipes
-        }
-
-        payload = {
-            "empresa": empresa,
-            "codrodada": codrodada,
-            "emaillider": emailLider,
-            "data_criacao": datetime.now().isoformat(),
-            "nome_arquivo": nome_arquivo,
-            "dados_json": dados_ia,
-            "arquivo_pdf_base64": pdf_base64
-        }
-
-        # Salva JSON IA no Supabase
-        salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo)
-        
-        # Retorno final para o front-end
-        return jsonify({"mensagem": "✅ Gráfico e JSON IA salvos no Supabase com sucesso."})
-
-        
     except Exception as e:
-        print(f"❌ Erro na geração do gráfico comparativo: {str(e)}")
+        print("💥 Erro geral na geração do gráfico:", str(e))
         return jsonify({"erro": str(e)}), 500
+
+
+def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+    import tempfile
+    from datetime import datetime
+    import base64
+    import requests
+
+    respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
+    respostas_equipes = json_data.get("avaliacoesEquipe", [])
+
+    pct_auto = calcular_percentuais(respostas_auto)
+    pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+
+    print("📊 Percentuais AUTO:", pct_auto)
+    print("📊 Percentuais EQUIPE:", pct_equipes)
+    print("🖨️ Gerando gráfico...")
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x = np.arange(len(arquetipos))
+    auto_vals = [pct_auto.get(a, 0) for a in arquetipos]
+    equipe_vals = [pct_equipes.get(a, 0) for a in arquetipos]
+
+    ax.bar(x - 0.2, auto_vals, width=0.4, label="Autoavaliação", color='royalblue')
+    ax.bar(x + 0.2, equipe_vals, width=0.4, label="Média da Equipe", color='darkorange')
+
+    for i, (a, e) in enumerate(zip(auto_vals, equipe_vals)):
+        ax.text(i - 0.2, a + 1, f"{a:.1f}%", ha='center', fontsize=9)
+        ax.text(i + 0.2, e + 1, f"{e:.1f}%", ha='center', fontsize=9)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(arquetipos)
+    ax.set_ylim(0, 100)
+    ax.set_yticks(np.arange(0, 110, 10))
+    ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
+    ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
+    ax.set_ylabel("Pontuação (%)")
+    ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
+    ax.legend()
+    plt.tight_layout()
+
+    print("📦 Salvando PDF em memória...")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        with PdfPages(tmp.name) as pdf:
+            pdf.savefig(fig)
+
+        with open(tmp.name, "rb") as f:
+            pdf_base64 = base64.b64encode(f.read()).decode("utf-8")
+
+    print("✅ PDF convertido em base64 com sucesso.")
+
+    SUPABASE_URL = os.environ.get("SUPABASE_REST_URL")
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    nome_arquivo = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
+
+    dados_ia = {
+        "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
+        "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
+        "n_avaliacoes": len(respostas_equipes),
+        "autoavaliacao": pct_auto,
+        "mediaEquipe": pct_equipes
+    }
+
+    payload = {
+        "empresa": empresa,
+        "codrodada": codrodada,
+        "emailLider": emailLider,
+        "data_criacao": datetime.utcnow().isoformat(),
+        "dados_json": dados_ia,
+        "nome_arquivo": nome_arquivo,
+        "arquivo_pdf_base64": pdf_base64
+    }
+
+    print("📤 Enviando JSON + PDF para Supabase...")
+    url_post = f"{SUPABASE_URL}/consolidado_arquetipos"
+    response = requests.post(url_post, headers=headers, json=payload)
+
+    if response.status_code in [200, 201]:
+        print("✅ Envio finalizado com sucesso.")
+    else:
+        print(f"❌ Erro ao enviar para Supabase: {response.status_code} → {response.text}")
 
 
 
