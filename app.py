@@ -387,10 +387,13 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     import requests
 
     respostas_auto = json_data.get("autoavaliacao", {}).get("respostas", {})
-    respostas_equipes = json_data.get("avaliacoesEquipe", [])
-
+    respostas_equipes = [
+        avaliacao.get("respostas", {}) for avaliacao in json_data.get("avaliacoesEquipe", [])
+    ]
+    
     pct_auto = calcular_percentuais(respostas_auto)
     pct_equipes = calcular_percentuais_equipes(respostas_equipes)
+
 
     print("📊 Percentuais AUTO:", pct_auto)
     print("📊 Percentuais EQUIPE:", pct_equipes)
