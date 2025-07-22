@@ -396,15 +396,7 @@ def gerar_graficos_comparativos():
 
         gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
-        return jsonify({
-            "titulo": dados_do_grafico["titulo"], # Supondo que você tenha os dados em uma variável
-            "subtitulo": dados_do_grafico["subtitulo"],
-            "mediaEquipe": dados_do_grafico["mediaEquipe"],
-            "n_avaliacoes": dados_do_grafico["n_avaliacoes"],
-            "autoavaliacao": dados_do_grafico["autoavaliacao"]
-            # E talvez a mensagem também, se quiser que ela apareça no console do frontend
-            # "mensagem": "✅ PDF e JSON gerados com sucesso e salvos no Supabase."
-        }), 200
+        return jsonify(json_data), 200
 
     except Exception as e:
         print("💥 Erro geral na geração do gráfico:", str(e))
