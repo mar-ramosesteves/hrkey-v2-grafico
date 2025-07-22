@@ -513,7 +513,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     else:
         print(f"❌ Erro ao enviar para Supabase: {response.status_code} → {response.text}")
 
-
+    return jsonify(dados_ia), 200
 
 @app.route("/ver-arquetipos")
 def ver_arquetipos():
