@@ -491,6 +491,19 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         "arquivo_pdf_base64": pdf_base64
     }
 
+    
+    
+    
+    # Garante que as variáveis de ambiente estão sendo usadas
+    # SUPABASE_REST_URL e SUPABASE_KEY já estão definidas globalmente no topo do arquivo.
+
+    # Agora, DEFINA o dicionário 'headers' imediatamente antes de usá-lo na requisição POST.
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
+
     print("📤 Enviando JSON + PDF para Supabase...")
     url_post = f"{SUPABASE_REST_URL}/consolidado_arquetipos"
     response = requests.post(url_post, headers=headers, json=payload)
