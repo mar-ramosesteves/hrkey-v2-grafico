@@ -396,15 +396,21 @@ def gerar_graficos_comparativos():
 
         gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
-        # Reconstruindo o JSON para o frontend com todas as chaves esperadas
+        # AS VARIÁVEIS A SEGUIR JÁ EXISTEM NO SEU CÓDIGO E TÊM OS VALORES CORRETOS:
+        # - 'pct_auto' (seus Percentuais AUTO calculados)
+        # - 'pct_equipes' (seus Percentuais EQUIPE calculados)
+        # - 'len(respostas_equipes)' (o total de avaliações da equipe)
+
+        # Montando o dicionário final para enviar ao frontend
         json_final_para_frontend = {
-            "titulo": json_data.get("titulo", "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE"),
-            "subtitulo": json_data.get("subtitulo", f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"),
-            "autoavaliacao": json_data.get("autoavaliacao", {}),
-            "mediaEquipe": json_data.get("mediaEquipe", {}),
-            "n_avaliacoes": json_data.get("n_avaliacoes", 0)
+            "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
+            "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+            "autoavaliacao": pct_auto,  # Usando a variável com os percentuais AUTO corretos
+            "mediaEquipe": pct_equipes, # Usando a variável com os percentuais EQUIPE corretos
+            "n_avaliacoes": len(respostas_equipes) # Usando a contagem correta de avaliações
         }
 
+        # Retornando o JSON completo para o frontend
         return jsonify(json_final_para_frontend), 200
 
     except Exception as e:
