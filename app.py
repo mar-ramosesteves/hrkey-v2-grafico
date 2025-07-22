@@ -465,7 +465,12 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
     print("✅ PDF convertido em base64 com sucesso.")
 
-    
+    # NOVO: Definindo os headers para a requisição POST
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json"
+    }
     nome_arquivo = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
 
     dados_ia = {
