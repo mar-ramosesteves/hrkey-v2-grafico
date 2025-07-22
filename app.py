@@ -394,24 +394,25 @@ def gerar_graficos_comparativos():
         json_data = registros[0]["dados_json"]
         print("📄 Consolidado encontrado. Chaves:", list(json_data.keys()))
 
-        gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
+        percentuais_auto_result, percentuais_equipe_result, num_avaliacoes_result = \
+            gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
         # AS VARIÁVEIS A SEGUIR JÁ EXISTEM NO SEU CÓDIGO E TÊM OS VALORES CORRETOS:
         # - 'pct_auto' (seus Percentuais AUTO calculados)
         # - 'pct_equipes' (seus Percentuais EQUIPE calculados)
         # - 'len(respostas_equipes)' (o total de avaliações da equipe)
 
-        # Montando o dicionário final para enviar ao frontend
-        json_final_para_frontend = {
+        # Montando o dicionário final para enviar ao frontend com os valores corretos
+        json_para_frontend = {
             "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
             "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
-            "autoavaliacao": pct_auto,  # Usando a variável com os percentuais AUTO corretos
-            "mediaEquipe": pct_equipes, # Usando a variável com os percentuais EQUIPE corretos
-            "n_avaliacoes": len(respostas_equipes) # Usando a contagem correta de avaliações
+            "autoavaliacao": percentuais_auto_result,    # Usando os resultados que vieram de volta
+            "mediaEquipe": percentuais_equipe_result,    # Usando os resultados que vieram de volta
+            "n_avaliacoes": num_avaliacoes_result        # Usando a contagem que veio de volta
         }
-
-        # Retornando o JSON completo para o frontend
-        return jsonify(json_final_para_frontend), 200
+    
+        # Retornando o JSON completo para o navegador
+        return jsonify(json_para_frontend), 200
 
     except Exception as e:
         print("💥 Erro geral na geração do gráfico:", str(e))
@@ -445,7 +446,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     # ✅ Verificação final
     print("📊 Percentuais AUTO:", pct_auto)
     print("📊 Percentuais EQUIPE:", pct_equipes)
-    print("🖨️ Gerando gráfico...")
+    return pct_auto, pct_equipes, len(respostas_equipes)
 
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(arquetipos))
