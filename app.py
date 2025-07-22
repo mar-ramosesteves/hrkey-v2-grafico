@@ -396,7 +396,16 @@ def gerar_graficos_comparativos():
 
         gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
-        return jsonify(json_data), 200
+        # Reconstruindo o JSON para o frontend com todas as chaves esperadas
+        json_final_para_frontend = {
+            "titulo": json_data.get("titulo", "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE"),
+            "subtitulo": json_data.get("subtitulo", f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"),
+            "autoavaliacao": json_data.get("autoavaliacao", {}),
+            "mediaEquipe": json_data.get("mediaEquipe", {}),
+            "n_avaliacoes": json_data.get("n_avaliacoes", 0)
+        }
+
+        return jsonify(json_final_para_frontend), 200
 
     except Exception as e:
         print("💥 Erro geral na geração do gráfico:", str(e))
