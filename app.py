@@ -381,7 +381,7 @@ def gerar_graficos_comparativos():
         }
 
         filtro = f"?empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emailLider}&select=dados_json"
-        url = f"{SUPABASE_URL}/consolidado_arquetipos{filtro}"
+        url = f"{SUPABASE_REST_URL}/consolidado_arquetipos{filtro}"
         print("🔎 Buscando consolidado no Supabase:", url)
 
         resp = requests.get(url, headers=headers)
@@ -487,7 +487,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     }
 
     print("📤 Enviando JSON + PDF para Supabase...")
-    url_post = f"{SUPABASE_URL}/consolidado_arquetipos"
+    url_post = f"{SUPABASE_REST_URL}/consolidado_arquetipos"
     response = requests.post(url_post, headers=headers, json=payload)
 
     if response.status_code in [200, 201]:
@@ -801,7 +801,7 @@ def salvar_json_ia_no_drive(dados, nome_base, service, id_lider):
 
 
 def salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo):
-    url = f"{SUPABASE_URL}/consolidado_arquetipos"
+    url = f"{SUPABASE_REST_URL}/consolidado_arquetipos"
     headers = {
         "Content-Type": "application/json",
         "apikey": SUPABASE_KEY,
