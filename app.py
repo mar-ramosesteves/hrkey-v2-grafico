@@ -29,70 +29,127 @@ import os
 
 # === Funções de cálculo ===
 
-
-
 def calcular_percentuais(respostas_dict):
     print("📥 [DEBUG] Entrou em calcular_percentuais")
-    print("📥 [DEBUG] Total de respostas recebidas:", len(respostas_dict))
+    print(f"📥 [DEBUG] Respostas recebidas: {len(respostas_dict)} itens. Exemplo Q01: {respostas_dict.get('Q01', 'N/A')}")
+
     total_por_arquetipo = {a: 0 for a in arquetipos}
     max_por_arquetipo = {a: 0 for a in arquetipos}
-    for cod in perguntas:
-        raw = respostas_dict.get(cod, "")
+
+    for cod_pergunta in perguntas: # Itera por "Q01", "Q02", ..., "Q49"
+        raw_nota = respostas_dict.get(cod_pergunta, "") # Pega a nota bruta (string)
+        
         try:
-            nota = int(round(float(raw)))
+            # Tenta converter a nota para float e depois para int
+            nota = int(round(float(raw_nota)))
+            
+            # Valida se a nota está no intervalo esperado (1 a 6)
             if nota < 1 or nota > 6:
-                print(f"⚠️ Nota fora do intervalo ignorada: {nota} ({cod})")
-                continue
-            arq = perguntas[cod]
-            total_por_arquetipo[arq] += nota
-            max_por_arquetipo[arq] += 6
-        except Exception as e:
-            print(f"⚠️ Erro ao processar {cod}: {raw} → {e}")
+                print(f"⚠️ Nota fora do intervalo ignorada para {cod_pergunta}: '{raw_nota}' -> {nota}")
+                continue # Pula para a próxima pergunta se a nota for inválida
+
+            # Para cada arquétipo, constrói a chave e busca na matriz
+            for arq_nome in arquetipos:
+                # Constrói a chave no formato "ARQUETIPO_NOME_NOTA_COD_PERGUNTA"
+                # Exemplo: "Formador2Q01"
+                chave = f"{arq_nome}{nota}{cod_pergunta}"
+                
+                # Busca a linha correspondente na matriz
+                # 'matriz' é o DataFrame carregado do seu Excel
+                linha_matriz = matriz[matriz["CHAVE"] == chave]
+
+                if not linha_matriz.empty:
+                    # Se a chave for encontrada, extrai os pontos obtidos e máximos
+                    pontos_obtidos = linha_matriz["PONTOS_OBTIDOS"].values[0]
+                    pontos_maximos = linha_matriz["PONTOS_MAXIMOS"].values[0]
+
+                    # Acumula os pontos para o arquétipo atual
+                    total_por_arquetipo[arq_nome] += pontos_obtidos
+                    max_por_arquetipo[arq_nome] += pontos_maximos
+                else:
+                    # Mensagem de depuração se a chave não for encontrada
+                    print(f"⚠️ Chave '{chave}' não encontrada na matriz para {cod_pergunta} com nota {nota} e arquétipo {arq_nome}.")
+
+        except ValueError:
+            # Captura erro se 'raw_nota' não puder ser convertido para número
+            print(f"⚠️ Erro de conversão para número em {cod_pergunta}: '{raw_nota}' não é um número válido.")
             continue
+        except Exception as e:
+            # Captura qualquer outro erro inesperado durante o processamento da pergunta
+            print(f"⚠️ Erro inesperado ao processar {cod_pergunta} com nota '{raw_nota}': {e}")
+            continue
+
     percentuais = {}
-    for arq in arquetipos:
-        if max_por_arquetipo[arq]:
-            percentuais[arq] = round((total_por_arquetipo[arq] / max_por_arquetipo[arq]) * 100, 1)
+    for arq_nome in arquetipos:
+        # Calcula o percentual apenas se houver pontos máximos para evitar divisão por zero
+        if max_por_arquetipo[arq_nome] > 0:
+            percentuais[arq_nome] = round((total_por_arquetipo[arq_nome] / max_por_arquetipo[arq_nome]) * 100, 1)
+        else:
+            percentuais[arq_nome] = 0 # Se não houver pontos máximos, o percentual é 0
+
+    print(f"📊 [DEBUG] Percentuais calculados: {percentuais}")
     return percentuais
+
 
 def calcular_percentuais_equipes(lista_de_respostas):
     print("📥 [DEBUG] Entrou em calcular_percentuais_equipes")
-    acumulado = {a: 0 for a in arquetipos}
-    maximo = {a: 0 for a in arquetipos}
-    for respostas_dict in lista_de_respostas:
-        for cod in perguntas:
-            raw = respostas_dict.get(cod, "")
-            try:
-                nota = int(round(float(raw)))
-                if nota < 1 or nota > 6:
-                    print(f"⚠️ Nota fora do intervalo ignorada: {nota} ({cod})")
-                    continue
-                arq = perguntas[cod]
-                acumulado[arq] += nota
-                maximo[arq] += 6
-            except Exception as e:
-                print(f"⚠️ Erro ao processar equipe {cod}: {raw} → {e}")
-                continue
-    percentuais = {}
-    for arq in arquetipos:
-        if maximo[arq]:
-            percentuais[arq] = round((acumulado[arq] / maximo[arq]) * 100, 1)
-    return percentuais
+    print(f"📥 [DEBUG] Total de avaliações de equipe recebidas: {len(lista_de_respostas)}")
 
-SUPABASE_REST_URL = os.getenv("SUPABASE_REST_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+    soma_percentuais_por_arquetipo = {a: 0 for a in arquetipos}
+    total_avaliacoes_validas = 0
+
+    for respostas_dict_membro in lista_de_respostas:
+        # Verifica se o dicionário de respostas do membro não está vazio
+        if not respostas_dict_membro:
+            print("⚠️ Dicionário de respostas de um membro da equipe está vazio, ignorando.")
+            continue
+        
+        # Chama a função calcular_percentuais para cada conjunto de respostas de um membro
+        percentuais_individuais = calcular_percentuais(respostas_dict_membro)
+        
+        # Verifica se o cálculo individual retornou percentuais válidos
+        if percentuais_individuais:
+            for arq_nome in arquetipos:
+                # Soma os percentuais individuais para cada arquétipo
+                soma_percentuais_por_arquetipo[arq_nome] += percentuais_individuais.get(arq_nome, 0)
+            total_avaliacoes_validas += 1
+        else:
+            print("⚠️ Cálculo individual de percentuais retornou vazio para um membro da equipe. Não será incluído na média.")
+
+    percentuais_medios = {}
+    if total_avaliacoes_validas == 0:
+        print("⚠️ Nenhuma avaliação de equipe válida para calcular a média. Retornando zeros.")
+        return {a: 0 for a in arquetipos} # Retorna todos os percentuais como 0 se não houver avaliações válidas
+
+    for arq_nome in arquetipos:
+        # Calcula a média dos percentuais para cada arquétipo
+        percentuais_medios[arq_nome] = round(soma_percentuais_por_arquetipo[arq_nome] / total_avaliacoes_validas, 1)
+
+    print(f"📊 [DEBUG] Percentuais médios da equipe calculados: {percentuais_medios}")
+    return percentuais_medios
 
 
-# ✅ Carrega a matriz de pontuação de arquétipos
+# NOVO: Configuração global do Supabase (manter este bloco)
+SUPABASE_REST_URL = os.environ.get("SUPABASE_REST_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+# Verifica se as variáveis de ambiente foram carregadas
+if not SUPABASE_REST_URL or not SUPABASE_KEY:
+    print("ERRO: Variáveis de ambiente SUPABASE_REST_URL ou SUPABASE_KEY não configuradas. Verifique suas configurações no Render.")
+else:
+    print("✅ Credenciais Supabase carregadas com sucesso.")
+
+# ✅ Carrega a matriz de pontuação de arquétipos (manter estas linhas)
 matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
 print("📄 Matriz com chave carregada. Total de linhas:", len(matriz))
 
-# ✅ Lista de arquétipos reconhecidos na matriz
-arquetipos = ["Formador", "Resoluto", "Cuidativo", "Consultivo", "Imperativo", "Prescritivo"]
+# ✅ Lista de arquétipos reconhecidos na matriz (manter estas linhas)
+arquetipos = ["Formador", "Resoluto", "Cuidativo", "Consultivo", "Imperativo", "Prescritivo"] # Mantenha a lista explícita que você me deu
+# Se você quiser que o código determine os arquétipos da matriz, use a linha original:
+# arquetipos = sorted(list(set([a[:3] for a in matriz.columns if len(a) == 6 and a[3:].isdigit()])))
 
-# ✅ Lista de perguntas válidas
+# ✅ Lista de perguntas válidas (manter esta linha)
 perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
-
 
 
 def salvar_json_ia_no_drive(dados, nome_base, service, id_lider):
@@ -294,38 +351,6 @@ def gerar_relatorio_json():
 
 
 
-from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
-import io
-import os
-import json
-import tempfile
-import time
-from datetime import datetime
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
-import pandas as pd
-import requests
-
-app = Flask(__name__)
-CORS(app, origins=["https://gestor.thehrkey.tech"])
-
-# Carrega a matriz e as perguntas
-matriz = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
-perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
-arquetipos = sorted(list(set([a[:3] for a in matriz.columns if len(a) == 6 and a[3:].isdigit()])))
-
-# Variáveis de ambiente Supabase
-SUPABASE_URL = os.getenv("SUPABASE_REST_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-TABELA_CONSOLIDADO = "consolidado_arquetipos"
-
-
-
-
-
-
 
 
 @app.route("/gerar-graficos-comparativos", methods=["POST", "OPTIONS"])
@@ -347,8 +372,7 @@ def gerar_graficos_comparativos():
         emailLider = dados.get("emailLider")
         print("📥 Dados recebidos:", empresa, codrodada, emailLider)
 
-        SUPABASE_URL = os.environ.get("SUPABASE_REST_URL")
-        SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+       
 
         headers = {
             "apikey": SUPABASE_KEY,
@@ -441,14 +465,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
     print("✅ PDF convertido em base64 com sucesso.")
 
-    SUPABASE_URL = os.environ.get("SUPABASE_REST_URL")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json"
-    }
-
+    
     nome_arquivo = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
 
     dados_ia = {
@@ -781,12 +798,7 @@ def salvar_json_ia_no_drive(dados, nome_base, service, id_lider):
         print(f"❌ Erro ao salvar JSON IA: {str(e)}")
 
 
-import requests
-import os
-from datetime import datetime
 
-SUPABASE_URL = os.environ["SUPABASE_REST_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 
 def salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo):
     url = f"{SUPABASE_URL}/consolidado_arquetipos"
