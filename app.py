@@ -562,214 +562,111 @@ def inserir_rodape(c, width, empresa, emailLider, codrodada):
 @app.route("/gerar-relatorio-analitico", methods=["POST"])
 def gerar_relatorio_analitico():
     try:
-        dados = request.get_json()
-        empresa = dados.get("empresa")
-        codrodada = dados.get("codrodada")
-        emailLider = dados.get("emailLider")
+        dados_requisicao = request.get_json()
+        empresa = dados_requisicao.get("empresa")
+        codrodada = dados_requisicao.get("codrodada")
+        emailLider = dados_requisicao.get("emailLider")
 
         if not all([empresa, codrodada, emailLider]):
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
-        id_empresa = garantir_pasta(empresa, PASTA_RAIZ)
-        id_rodada = garantir_pasta(codrodada, id_empresa)
-        id_lider = garantir_pasta(emailLider, id_rodada)
+        # --- BUSCAR RELATÓRIO CONSOLIDADO DO SUPABASE ---
+        if not SUPABASE_REST_URL or not SUPABASE_KEY:
+            return jsonify({"erro": "Configuração do Supabase ausente no servidor."}), 500
 
-        arquivos_json = service.files().list(
-            q=f"'{id_lider}' in parents and name contains 'relatorio_consolidado_' and trashed = false and mimeType='application/json'",
-            fields="files(id, name, createdTime)").execute().get("files", [])
+        # Ajuste o nome da tabela onde o relatório consolidado está salvo no Supabase
+        # Assumindo que é a mesma tabela onde você salva os dados consolidados do Google Drive
+        supabase_url_consolidado = f"{SUPABASE_REST_URL}/consolidado_arquetipos" # Verifique se este é o nome correto da sua tabela
+        supabase_headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
 
-        arquivos_filtrados = [
-            f for f in arquivos_json
-            if emailLider.lower() in f["name"].lower() and codrodada.lower() in f["name"].lower()
-        ]
+        # Filtra por empresa, codrodada e emaillider (ajuste os nomes das colunas conforme seu Supabase)
+        params_consolidado = {
+            "empresa": f"eq.{empresa}",
+            "codrodada": f"eq.{codrodada}",
+            "emaillider": f"eq.{emailLider}"
+        }
+        
+        # Faz a requisição GET para o Supabase
+        print(f"DEBUG: Buscando relatório consolidado no Supabase para Empresa: {empresa}, Rodada: {codrodada}, Líder: {emailLider}")
+        supabase_response = requests.get(supabase_url_consolidado, headers=supabase_headers, params=params_consolidado, timeout=30)
+        supabase_response.raise_for_status() # Lança um erro para status HTTP ruins
 
-        if not arquivos_filtrados:
-            return jsonify({"erro": "Relatório consolidado não encontrado."}), 404
+        consolidated_data_list = supabase_response.json()
 
-        arquivo_alvo = sorted(arquivos_filtrados, key=lambda x: x["createdTime"], reverse=True)[0]
-        file_id = arquivo_alvo["id"]
+        if not consolidated_data_list:
+            return jsonify({"erro": "Relatório consolidado não encontrado no Supabase para os dados fornecidos."}), 404
 
-        fh = io.BytesIO()
-        request_drive = service.files().get_media(fileId=file_id)
-        downloader = MediaIoBaseDownload(fh, request_drive)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
+        # Assume que o último registro é o mais recente ou que só há um
+        # Ou adicione lógica para escolher o mais relevante se houver múltiplos
+        relatorio_consolidado = consolidated_data_list[-1].get("dados_json", {})
 
-        relatorio = json.loads(fh.getvalue().decode("utf-8"))
-        auto = relatorio.get("autoavaliacao", {})
-        equipes = relatorio.get("avaliacoesEquipe", [])
+        if not relatorio_consolidado:
+            return jsonify({"erro": "Dados JSON do relatório consolidado vazios no Supabase para os dados fornecidos."}), 404
+
+        auto = relatorio_consolidado.get("autoavaliacao", {})
+        equipes = relatorio_consolidado.get("avaliacoesEquipe", [])
 
         respostas_auto = auto.get("respostas", {})
         respostas_equipes = [r.get("respostas", {}) for r in equipes if r.get("respostas")]
 
-        with open("arquetipos_dominantes_por_questao.json", encoding="utf-8") as f:
-            mapa_dom = json.load(f)
+        # --- CARREGAR ARQUIVOS JSON E EXCEL LOCAIS ---
+        # Certifique-se de que 'arquetipos_dominantes_por_questao.json' e 'TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx'
+        # estão presentes no diretório raiz do seu projeto no Render.com.
+        try:
+            with open("arquetipos_dominantes_por_questao.json", encoding="utf-8") as f:
+                mapa_dom = json.load(f)
+            print("DEBUG: arquetipos_dominantes_por_questao.json carregado com sucesso.")
+        except FileNotFoundError:
+            return jsonify({"erro": "Arquivo 'arquetipos_dominantes_por_questao.json' não encontrado no servidor."}), 500
+        except json.JSONDecodeError:
+            return jsonify({"erro": "Erro ao decodificar 'arquetipos_dominantes_por_questao.json'. Verifique o formato JSON."}), 500
+        except Exception as e:
+            return jsonify({"erro": f"Erro ao carregar 'arquetipos_dominantes_por_questao.json': {str(e)}"}), 500
 
-        matriz_df = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
-
-        def extrair_valor(matriz_df, cod, nota):
-            try:
-                nota = int(round(float(nota)))
-                if nota < 1 or nota > 6:
-                    return None
-            except:
-                return None
-
-            for arq in arquetipos:
-                chave = f"{arq}{nota}{cod}"
-                linha = matriz_df[matriz_df["CHAVE"] == chave]
-                if not linha.empty:
-                    percentual = round(float(linha['% Tendência'].values[0]) * 100, 1)
-                    return {
-                        "tendencia": linha['Tendência'].values[0],
-                        "percentual": percentual,
-                        "afirmacao": linha['AFIRMACAO'].values[0]
-                    }
-            return None
-
-        from reportlab.lib.pagesizes import A4
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.units import cm
-
-        nome_pdf = f"RELATORIO_ANALITICO_ARQUETIPOS_{empresa}_{emailLider}_{codrodada}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
-        c = canvas.Canvas(tmp_path, pagesize=A4)
-        width, height = A4
-
-        c.setFont("Helvetica-Bold", 30)
-        titulo = "Relatório Analítico por Arquétipos"
-        c.drawCentredString(width / 2, height / 2, titulo)
-
-        c.setFont("Helvetica", 12)
-        info1 = f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}"
-        info2 = datetime.now().strftime("%d/%m/%Y %H:%M")
-
-        linha1_y = (height / 2) - 1.2 * cm
-        linha2_y = linha1_y - 0.6 * cm
-
-        c.drawCentredString(width / 2, linha1_y, info1)
-        c.drawCentredString(width / 2, linha2_y, info2)
-        c.showPage()
+        try:
+            matriz_df = pd.read_excel("TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx")
+            print("DEBUG: TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx carregada com sucesso.")
+        except FileNotFoundError:
+            return jsonify({"erro": "Arquivo 'TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx' não encontrado no servidor."}), 500
+        except Exception as e:
+            return jsonify({"erro": f"Erro ao carregar 'TABELA_GERAL_ARQUETIPOS_COM_CHAVE.xlsx': {str(e)}"}), 500
 
 
-        y = height - 3 * cm
-        espacamento = 2.2 * cm
-
-        agrupado = {}
+        # Definir a lista de arquétipos para a função extrair_valor
+        arquetipos_list_for_extrair_valor = set()
         for cod, dupla in mapa_dom.items():
-            chave = " e ".join(sorted(dupla))
-            if chave not in agrupado:
-                agrupado[chave] = []
-            agrupado[chave].append(cod)
+            for arq in dupla:
+                arquetipos_list_for_extrair_valor.add(arq)
+        arquetipos_list_for_extrair_valor = sorted(list(arquetipos_list_for_extrair_valor))
 
-        def desenhar_barra(c, x, y, percentual, label):
-            largura_max = 12 * cm
-            altura = 0.4 * cm
-            cor = (1.0, 0.5, 0.0) if any(w in label.lower() for w in ["desfavorável", "pouco desfavorável", "muito desfavorável"]) else (0.2, 0.6, 0.2)
-            largura = largura_max * (percentual / 100)
-            c.setFillColorRGB(*cor)
-            c.rect(x, y, largura, altura, fill=True, stroke=False)
-            c.setFillColorRGB(0, 0, 0)
-            for i in range(0, 110, 10):
-                xi = x + (largura_max * i / 100)
-                c.line(xi, y, xi, y + altura)
-                c.setFont("Helvetica", 6)
-                c.drawString(xi - 0.2 * cm, y - 0.3 * cm, f"{i}%")
-
-        primeiro_grupo = True
-        for grupo, codigos in agrupado.items():
-            if not primeiro_grupo:
-                c.showPage()
-            else:
-                primeiro_grupo = False
-
-            y = height - 3 * cm
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(2 * cm, y, f"🔹 Afirmações que impactam os arquétipos: {grupo}")
-            y -= espacamento / 2
-
-
-            for cod in codigos:
-                info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
-                somatorio = 0
-                qtd_avaliacoes = 0
-                for r in respostas_equipes:
-                    try:
-                        nota = int(round(float(r.get(cod, 0))))
-                        if 1 <= nota <= 6:
-                            somatorio += nota
-                            qtd_avaliacoes += 1
-                    except:
-                        continue
-
-                info_eq = None
-                if qtd_avaliacoes > 0:
-                    media = round(somatorio / qtd_avaliacoes)
-                    info_eq = extrair_valor(matriz_df, cod, media)
-
-                if not info_auto and not info_eq:
-                    continue
-
-                texto = info_auto["afirmacao"] if info_auto else cod
-                tendencia_auto = info_auto["tendencia"] if info_auto else "-"
-                percentual_auto = info_auto["percentual"] if info_auto else 0
-                tendencia_eq = info_eq["tendencia"] if info_eq else "-"
-                percentual_eq = info_eq["percentual"] if info_eq else 0
-
-                c.setFont("Helvetica", 10)
-
-                texto_afirmacao = f"{cod}: {texto}"
-                linhas_afirmacao = wrap(texto_afirmacao, width=100)
-                textobj = c.beginText()
-                textobj.setTextOrigin(2 * cm, y)
-                textobj.setFont("Helvetica", 10)
-                for linha in linhas_afirmacao:
-                    textobj.textLine(linha)
-                c.drawText(textobj)
-                y -= espacamento / 2 + (len(linhas_afirmacao) - 1) * 0.5 * cm
-
-                c.drawString(2.5 * cm, y, f"Autoavaliação → Tendência: {tendencia_auto} | %: {percentual_auto}%")
-                y -= 0.6 * cm
-                desenhar_barra(c, 2.5 * cm, y, percentual_auto, tendencia_auto)
-                y -= espacamento / 2
-
-                c.setFont("Helvetica", 10)
-                c.drawString(2.5 * cm, y, f"Média Equipe → Tendência: {tendencia_eq} | %: {percentual_eq}%")
-                y -= 0.6 * cm
-                desenhar_barra(c, 2.5 * cm, y, percentual_eq, tendencia_eq)
-                y -= espacamento / 1
-
-                if y < 4 * cm and cod != codigos[-1]:  # Evita página em branco no último item
-                    c.setFont("Helvetica", 8)
-                    c.drawRightString(width - 2 * cm, 2.1 * cm, f"Página {c.getPageNumber()}")
-                    c.showPage()
-                    y = height - 4 * cm
-
-
-        c.save()
-
-        file_metadata = {"name": nome_pdf, "parents": [id_lider]}
-        media = MediaFileUpload(tmp_path, mimetype="application/pdf", resumable=False)
-        enviado = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-
-
-
-
-
-        # 🔁 Salvar JSON com os dados do relatório analítico
+        # Preparar dados para o frontend
         dados_gerados = {
             "titulo": "RELATÓRIO ANALÍTICO ARQUÉTIPOS - POR QUESTÃO",
             "empresa": empresa,
             "codrodada": codrodada,
             "emailLider": emailLider,
-            "n_avaliacoes": len(respostas_equipes),
+            "n_avaliacoes": len(respostas_equipes), # Número de avaliações da equipe
             "analitico": []
         }
 
-        for grupo, codigos in agrupado.items():
+        # Recriar a estrutura 'agrupado' para o agrupamento consistente no frontend
+        agrupado_para_frontend = {}
+        for cod_questao, duplas_arquetipos in mapa_dom.items():
+            chave_grupo = " e ".join(sorted(duplas_arquetipos))
+            if chave_grupo not in agrupado_para_frontend:
+                agrupado_para_frontend[chave_grupo] = []
+            agrupado_para_frontend[chave_grupo].append(cod_questao)
+
+        # Iterar sobre as questões agrupadas para popular 'analitico'
+        for grupo, codigos in agrupado_para_frontend.items():
             for cod in codigos:
-                info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod))
+                info_auto = extrair_valor(matriz_df, cod, respostas_auto.get(cod), arquetipos_list_for_extrair_valor)
+                
                 somatorio = 0
                 qtd_avaliacoes = 0
                 for r in respostas_equipes:
@@ -778,38 +675,58 @@ def gerar_relatorio_analitico():
                         if 1 <= nota <= 6:
                             somatorio += nota
                             qtd_avaliacoes += 1
-                    except:
+                    except (ValueError, TypeError):
                         continue
 
                 info_eq = None
                 if qtd_avaliacoes > 0:
                     media = round(somatorio / qtd_avaliacoes)
-                    info_eq = extrair_valor(matriz_df, cod, media)
+                    info_eq = extrair_valor(matriz_df, cod, media, arquetipos_list_for_extrair_valor)
 
-                if not info_auto and not info_eq:
-                    continue
+                # Incluir a questão apenas se houver dados de autoavaliação ou equipe
+                if info_auto or info_eq:
+                    dados_gerados["analitico"].append({
+                        "grupoArquetipo": grupo, # Adicionado este campo para o agrupamento no frontend
+                        "codigo": cod,
+                        "afirmacao": (info_auto["afirmacao"] if info_auto else f"Afirmação para {cod}"),
+                        "autoavaliacao": {
+                            "tendencia": info_auto["tendencia"] if info_auto else "-",
+                            "percentual": info_auto["percentual"] if info_auto else 0
+                        },
+                        "mediaEquipe": {
+                            "tendencia": info_eq["tendencia"] if info_eq else "-",
+                            "percentual": info_eq["percentual"] if info_eq else 0
+                        }
+                    })
+        
+        # Chamar a NOVA função para salvar os dados analíticos gerados no Supabase
+        nome_arquivo_supabase = f"RELATORIO_ANALITICO_DADOS_{empresa}_{emailLider}_{codrodada}"
+        salvar_relatorio_analitico_no_supabase(dados_gerados, empresa, codrodada, emailLider, nome_arquivo_supabase)
 
-                dados_gerados["analitico"].append({
-                    "codigo": cod,
-                    "afirmacao": info_auto["afirmacao"] if info_auto else cod,
-                    "autoavaliacao": {
-                        "tendencia": info_auto["tendencia"] if info_auto else "-",
-                        "percentual": info_auto["percentual"] if info_auto else 0
-                    },
-                    "mediaEquipe": {
-                        "tendencia": info_eq["tendencia"] if info_eq else "-",
-                        "percentual": info_eq["percentual"] if info_eq else 0
-                    }
-                })
+        # Retorna os dados gerados como JSON para o frontend
+        return jsonify(dados_gerados), 200
 
-        nome_base = nome_pdf.replace(".pdf", "")
-        salvar_json_ia_no_drive(dados_gerados, nome_base, service, id_lider)
-
-
-        return jsonify({"mensagem": "✅ Relatório analítico gerado e salvo com sucesso."})
-
+    except requests.exceptions.RequestException as e:
+        # Erros específicos de requisição HTTP (Supabase)
+        error_message = f"Erro de comunicação com o Supabase: {str(e)}"
+        detailed_traceback = traceback.format_exc()
+        print(f"ERRO DE COMUNICAÇÃO SUPABASE: {error_message}")
+        print(f"TRACEBACK COMPLETO:\n{detailed_traceback}")
+        return jsonify({"erro": error_message, "traceback": detailed_traceback}), 500
+    except FileNotFoundError as e:
+        # Erros de arquivo não encontrado
+        error_message = f"Arquivo necessário não encontrado no servidor: {str(e)}"
+        detailed_traceback = traceback.format_exc()
+        print(f"ERRO DE ARQUIVO: {error_message}")
+        print(f"TRACEBACK COMPLETO:\n{detailed_traceback}")
+        return jsonify({"erro": error_message, "traceback": detailed_traceback}), 500
     except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+        # Captura e retorna qualquer outro erro detalhado para depuração no frontend
+        error_message = str(e)
+        detailed_traceback = traceback.format_exc()
+        print(f"ERRO CRÍTICO NO BACKEND (GENÉRICO): {error_message}")
+        print(f"TRACEBACK COMPLETO:\n{detailed_traceback}")
+        return jsonify({"erro": error_message, "traceback": detailed_traceback}), 500
 
 
 def salvar_json_ia_no_drive(dados, nome_base, service, id_lider):
@@ -870,4 +787,43 @@ def salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_ar
         print("✅ JSON do gráfico salvo no Supabase com sucesso.")
 
 
+# --- NOVA FUNÇÃO PARA SALVAR O RELATÓRIO ANALÍTICO NO SUPABASE ---
+# Mantenha sua função 'salvar_json_ia_no_supabase' existente intacta.
+# Esta nova função será usada APENAS para o Relatório Analítico.
+def salvar_relatorio_analitico_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo):
+    """
+    Salva os dados gerados do relatório analítico no Supabase.
+    """
+    if not SUPABASE_REST_URL or not SUPABASE_KEY:
+        print("❌ Não foi possível salvar o relatório analítico no Supabase: Variáveis de ambiente não configuradas.")
+        return
+
+    # Ajuste o nome da tabela no Supabase se for diferente.
+    # Esta tabela deve ser para os dados do relatório analítico por questão.
+    url = f"{SUPABASE_REST_URL}/relatorios_analiticos_hrkey" # Sugestão de nome de tabela
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}" # Use a chave de serviço para escrita se for o caso
+    }
+
+    payload = {
+        "empresa": empresa,
+        "codrodada": codrodada,
+        "emaillider": emailLider,
+        "dados_json": dados_ia, # Os dados JSON completos do relatório analítico
+        "nome_arquivo": nome_arquivo,
+        "data_criacao": datetime.now().isoformat()
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status() # Lança um erro para status de resposta HTTP ruins (4xx ou 5xx)
+        print("✅ JSON do relatório analítico salvo no Supabase com sucesso.")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Erro ao salvar JSON do relatório analítico no Supabase: {e}")
+        if hasattr(response, 'status_code') and hasattr(response, 'text'):
+            print(f"Detalhes da resposta do Supabase: Status {response.status_code} - {response.text}")
+        else:
+            print("Não foi possível obter detalhes da resposta do Supabase.")
 
