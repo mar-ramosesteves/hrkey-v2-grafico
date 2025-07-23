@@ -23,7 +23,7 @@ from math import pi
 from reportlab.lib.units import cm
 import pandas as pd
 import os
-
+import traceback # NOVO: Para depuração detalhada
 
 
 
