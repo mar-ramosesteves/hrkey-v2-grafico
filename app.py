@@ -160,6 +160,67 @@ arquetipos = ["Formador", "Resoluto", "Cuidativo", "Consultivo", "Imperativo", "
 # ✅ Lista de perguntas válidas (manter esta linha)
 perguntas = [f"Q{str(i).zfill(2)}" for i in range(1, 50)]
 
+def extrair_valor(matriz_df, cod, nota, arquetipos_list):
+    """
+    Extrai informações de tendência e percentual da matriz_df
+    com base no código da questão e na nota.
+    """
+    try:
+        nota = int(round(float(nota)))
+        if nota < 1 or nota > 6:
+            return None
+    except (ValueError, TypeError):
+        return None
+
+    for arq_item in arquetipos_list:
+        chave = f"{arq_item}{nota}{cod}"
+        linha = matriz_df[matriz_df["CHAVE"] == chave]
+        if not linha.empty:
+            percentual = round(float(linha['% Tendência'].values[0]) * 100, 1)
+            return {
+                "tendencia": linha['Tendência'].values[0],
+                "percentual": percentual,
+                "afirmacao": linha['AFIRMACAO'].values[0]
+            }
+    return None
+
+def salvar_relatorio_analitico_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo):
+    """
+    Salva os dados gerados do relatório analítico no Supabase.
+    """
+    if not SUPABASE_REST_URL or not SUPABASE_KEY:
+        print("❌ Não foi possível salvar o relatório analítico no Supabase: Variáveis de ambiente não configuradas.")
+        return
+
+    # Ajuste o nome da tabela no Supabase se for diferente.
+    # Esta tabela deve ser para os dados do relatório analítico por questão.
+    url = f"{SUPABASE_REST_URL}/relatorios_analiticos_hrkey" # Sugestão de nome de tabela
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}" # Use a chave de serviço para escrita se for o caso
+    }
+
+    payload = {
+        "empresa": empresa,
+        "codrodada": codrodada,
+        "emaillider": emailLider,
+        "dados_json": dados_ia, # Os dados JSON completos do relatório analítico
+        "nome_arquivo": nome_arquivo,
+        "data_criacao": datetime.now().isoformat()
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status() # Lança um erro para status de resposta HTTP ruins (4xx ou 5xx)
+        print("✅ JSON do relatório analítico salvo no Supabase com sucesso.")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Erro ao salvar JSON do relatório analítico no Supabase: {e}")
+        if hasattr(response, 'status_code') and hasattr(response, 'text'):
+            print(f"Detalhes da resposta do Supabase: Status {response.status_code} - {response.text}")
+        else:
+            print("Não foi possível obter detalhes da resposta do Supabase.")
+
 
 def salvar_json_ia_no_drive(dados, nome_base, service, id_lider):
     from io import BytesIO
@@ -575,7 +636,6 @@ def gerar_relatorio_analitico():
             return jsonify({"erro": "Configuração do Supabase ausente no servidor."}), 500
 
         # Ajuste o nome da tabela onde o relatório consolidado está salvo no Supabase
-        # Assumindo que é a mesma tabela onde você salva os dados consolidados do Google Drive
         supabase_url_consolidado = f"{SUPABASE_REST_URL}/consolidado_arquetipos" # Verifique se este é o nome correto da sua tabela
         supabase_headers = {
             "apikey": SUPABASE_KEY,
@@ -826,4 +886,8 @@ def salvar_relatorio_analitico_no_supabase(dados_ia, empresa, codrodada, emailLi
             print(f"Detalhes da resposta do Supabase: Status {response.status_code} - {response.text}")
         else:
             print("Não foi possível obter detalhes da resposta do Supabase.")
+
+# --- EXECUÇÃO DO FLASK APP ---
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000))
 
