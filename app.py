@@ -394,7 +394,7 @@ def gerar_graficos_comparativos():
         json_data = registros[0]["dados_json"]
         print("📄 Consolidado encontrado. Chaves:", list(json_data.keys()))
 
-        percentuais_auto_result, percentuais_equipe_result, num_avaliacoes_result = \
+        percentuais_auto_result, percentuais_equipe_result, num_avaliacoes_result, dados_gerais_grafico = \
             gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
 
         # AS VARIÁVEIS A SEGUIR JÁ EXISTEM NO SEU CÓDIGO E TÊM OS VALORES CORRETOS:
@@ -404,11 +404,13 @@ def gerar_graficos_comparativos():
 
         # Montando o dicionário final para enviar ao frontend com os valores corretos
         json_para_frontend = {
-            "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
-            "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
-            "autoavaliacao": percentuais_auto_result,    # Usando os resultados que vieram de volta
-            "mediaEquipe": percentuais_equipe_result,    # Usando os resultados que vieram de volta
-            "n_avaliacoes": num_avaliacoes_result        # Usando a contagem que veio de volta
+            "titulo": dados_gerais_grafico["titulo"], # Pega do novo dicionário
+            "subtitulo": dados_gerais_grafico["subtitulo"], # Pega do novo dicionário
+            "info_avaliacoes": dados_gerais_grafico["info_avaliacoes"], # Pega do novo dicionário
+            "arquetipos": arquetipos, # Envia a lista de arquétipos também
+            "autoavaliacao": percentuais_auto_result,    # Seus percentuais de autoavaliação
+            "mediaEquipe": percentuais_equipe_result,    # Seus percentuais da média da equipe
+            "n_avaliacoes": num_avaliacoes_result        # A contagem de avaliações
         }
     
         # Retornando o JSON completo para o navegador
@@ -444,9 +446,19 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     pct_equipes = calcular_percentuais_equipes(respostas_equipes)
     
     # ✅ Verificação final
-    print("📊 Percentuais AUTO:", pct_auto)
-    print("📊 Percentuais EQUIPE:", pct_equipes)
-    return pct_auto, pct_equipes, len(respostas_equipes)
+    # Este bloco prepara os dados para o gráfico de barras (se você fosse gerar um no backend)
+    # e também para os títulos/subtítulos do frontend.
+    # Estamos mantendo ele aqui para organização e como base para futuros desenvolvimentos
+    # de relatórios ou outros gráficos que possam ser gerados no backend.
+
+    # Dados para o título/subtítulo e número de avaliações,
+    # serão usados no JSON final.
+    dados_gerais_grafico = {
+        "titulo": "ARQUÉTIPOS DE GESTÃO",
+        "subtitulo": f"{emailLider} | {codrodada} | {empresa}",
+        "info_avaliacoes": f"Equipe: {len(respostas_equipes)} respondentes"
+    }
+    return pct_auto, pct_equipes, len(respostas_equipes), dados_gerais_grafico
 
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(arquetipos))
