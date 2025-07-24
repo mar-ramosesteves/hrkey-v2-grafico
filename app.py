@@ -666,7 +666,7 @@ def gerar_relatorio_analitico():
         dados_requisicao = request.get_json()
         empresa = dados_requisicao.get("empresa")
         codrodada = dados_requisicao.get("codrodada")
-        emailLider = dados_requisicao.get("emailLider")
+        emaillider_req = dados_requisicao.get("emaillider") # Ajustado para minúsculo para usar na API e DB
 
         if not all([empresa, codrodada, emailLider]):
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
@@ -674,6 +674,57 @@ def gerar_relatorio_analitico():
         # --- BUSCAR RELATÓRIO CONSOLIDADO DO SUPABASE ---
         if not SUPABASE_REST_URL or not SUPABASE_KEY:
             return jsonify({"erro": "Configuração do Supabase ausente no servidor."}), 500
+
+        # --- Lógica de Caching: Buscar Relatório Salvo (NÃO DUPLICAR A VERIFICAÇÃO DE CHAVES!) ---
+        # Nome da tabela para buscar relatórios gerados
+        url_busca_cache = f"{SUPABASE_REST_URL}/relatorios_gerados"
+        tipo_relatorio_atual = "arquetipos_analitico" # Identificador único para este tipo de relatório
+
+        # Parâmetros de busca para o cache
+        params_cache = {
+            "empresa": f"eq.{empresa}",
+            "codrodada": f"eq.{codrodada}",
+            "emaillider": f"eq.{emaillider_req}", # Usando emaillider_req para busca
+            "tipo_relatorio": f"eq.{tipo_relatorio_atual}",
+            "order": "data_criacao.desc", # Pega o mais recente pela nova coluna data_criacao
+            "limit": 1
+        }
+
+        print(f"DEBUG: Buscando cache do relatório '{tipo_relatorio_atual}' no Supabase...")
+        cache_response = requests.get(url_busca_cache, headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}"
+        }, params=params_cache, timeout=15)
+        cache_response.raise_for_status()
+        cached_data_list = cache_response.json()
+
+        if cached_data_list:
+            cached_report = cached_data_list[0]
+            data_criacao_cache_str = cached_report.get("data_criacao")
+            
+            if data_criacao_cache_str:
+                # O Supabase retorna timestamps em formato ISO 8601 (com 'Z' para UTC)
+                # datetime.fromisoformat no Python 3.11+ lida bem com isso.
+                # Para Python < 3.11, pode ser necessário .replace('Z', '+00:00')
+                data_criacao_cache = datetime.fromisoformat(data_criacao_cache_str.replace('Z', '+00:00')) 
+                
+                # Define um período de validade do cache, ex: 1 hora
+                # OU uma lógica mais complexa baseada na última atualização dos dados brutos
+                cache_validity_period = timedelta(hours=1) 
+
+                if datetime.now(data_criacao_cache.tzinfo) - data_criacao_cache < cache_validity_period:
+                    print(f"✅ Cache válido encontrado para o relatório '{tipo_relatorio_atual}'. Retornando dados cacheados.")
+                    return jsonify(cached_report.get("dados_json", {})), 200
+                else:
+                    print(f"Cache do relatório '{tipo_relatorio_atual}' expirado. Recalculando...")
+            else:
+                print("Cache encontrado, mas sem data de criação válida. Recalculando...")
+        else:
+            print(f"Cache do relatório '{tipo_relatorio_atual}' não encontrado. Recalculando...")
+
+        # --- SEU CÓDIGO DA ROTA ORIGINAL CONTINUA A PARTIR DAQUI SE O CACHE NÃO FOR ENCONTRADO OU ESTIVER EXPIRADO ---
+
+        
 
         # Ajuste o nome da tabela onde o relatório consolidado está salvo no Supabase
         supabase_url_consolidado = f"{SUPABASE_REST_URL}/consolidado_arquetipos" # Verifique se este é o nome correto da sua tabela
@@ -688,7 +739,7 @@ def gerar_relatorio_analitico():
         params_consolidado = {
             "empresa": f"eq.{empresa}",
             "codrodada": f"eq.{codrodada}",
-            "emaillider": f"eq.{emailLider}"
+            "emaillider": f"eq.{emaillider_req}"
         }
         
         # Faz a requisição GET para o Supabase
@@ -801,7 +852,7 @@ def gerar_relatorio_analitico():
         
         # Chamar a NOVA função para salvar os dados analíticos gerados no Supabase
         nome_arquivo_supabase = f"RELATORIO_ANALITICO_DADOS_{empresa}_{emailLider}_{codrodada}"
-        salvar_relatorio_analitico_no_supabase(dados_gerados, empresa, codrodada, emailLider, nome_arquivo_supabase)
+        salvar_relatorio_analitico_no_supabase(dados_gerados, empresa, codrodada, emaillider_req, tipo_relatorio_atual)
 
         # Retorna os dados gerados como JSON para o frontend
         return jsonify(dados_gerados), 200
