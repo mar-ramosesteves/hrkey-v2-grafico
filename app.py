@@ -668,7 +668,7 @@ def gerar_relatorio_analitico():
         codrodada = dados_requisicao.get("codrodada")
         emaillider_req = dados_requisicao.get("emaillider") # Ajustado para minúsculo para usar na API e DB
 
-        if not all([empresa, codrodada, emaillider]):
+        if not all([empresa, codrodada, emaillider_req]):
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
         # --- BUSCAR RELATÓRIO CONSOLIDADO DO SUPABASE ---
@@ -743,7 +743,7 @@ def gerar_relatorio_analitico():
         }
         
         # Faz a requisição GET para o Supabase
-        print(f"DEBUG: Buscando relatório consolidado no Supabase para Empresa: {empresa}, Rodada: {codrodada}, Líder: {emailLider}")
+        print(f"DEBUG: Buscando relatório consolidado no Supabase para Empresa: {empresa}, Rodada: {codrodada}, Líder: {emaillider_req}")
         supabase_response = requests.get(supabase_url_consolidado, headers=supabase_headers, params=params_consolidado, timeout=30)
         supabase_response.raise_for_status() # Lança um erro para status HTTP ruins
 
@@ -941,7 +941,7 @@ def salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_ar
 # --- NOVA FUNÇÃO PARA SALVAR O RELATÓRIO ANALÍTICO NO SUPABASE ---
 # Mantenha sua função 'salvar_json_ia_no_supabase' existente intacta.
 # Esta nova função será usada APENAS para o Relatório Analítico.
-def salvar_relatorio_analitico_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo):
+def salvar_relatorio_analitico_no_supabase(dados_ia, empresa, codrodada, emaillider_val, tipo_relatorio_str):
     """
     Salva os dados gerados do relatório analítico no Supabase.
     """
@@ -961,7 +961,7 @@ def salvar_relatorio_analitico_no_supabase(dados_ia, empresa, codrodada, emailLi
     payload = {
         "empresa": empresa,
         "codrodada": codrodada,
-        "emaillider": emailLider,
+        "emaillider": emaillider_val, # Agora usando o parâmetro correto da função
         "dados_json": dados_ia, # Os dados JSON completos do relatório analítico
         "nome_arquivo": nome_arquivo,
         "data_criacao": datetime.now().isoformat()
