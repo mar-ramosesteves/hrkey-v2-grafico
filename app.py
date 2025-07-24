@@ -666,7 +666,7 @@ def gerar_relatorio_analitico():
         dados_requisicao = request.get_json()
         empresa = dados_requisicao.get("empresa")
         codrodada = dados_requisicao.get("codrodada")
-        emaillider_req = dados_requisicao.get("emaillider") # Ajustado para minúsculo para usar na API e DB
+        emaillider_req = dados_requisicao.get("emailLider") # Ajustado para minúsculo para usar na API e DB
 
         if not all([empresa, codrodada, emaillider_req]):
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
