@@ -963,7 +963,7 @@ def salvar_relatorio_analitico_no_supabase(dados_ia, empresa, codrodada, emailli
         "codrodada": codrodada,
         "emaillider": emaillider_val, # Agora usando o parâmetro correto da função
         "dados_json": dados_ia, # Os dados JSON completos do relatório analítico
-        "nome_arquivo": nome_arquivo,
+        "tipo_relatorio": tipo_relatorio_str,
         "data_criacao": datetime.now().isoformat()
     }
 
