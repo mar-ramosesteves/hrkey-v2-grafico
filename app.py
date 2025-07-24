@@ -851,7 +851,7 @@ def gerar_relatorio_analitico():
                     })
         
         # Chamar a NOVA função para salvar os dados analíticos gerados no Supabase
-        nome_arquivo_supabase = f"RELATORIO_ANALITICO_DADOS_{empresa}_{emailLider}_{codrodada}"
+        nome_arquivo_supabase = f"RELATORIO_ANALITICO_DADOS_{empresa}_{emaillider_req}_{codrodada}"
         salvar_relatorio_analitico_no_supabase(dados_gerados, empresa, codrodada, emaillider_req, tipo_relatorio_atual)
 
         # Retorna os dados gerados como JSON para o frontend
