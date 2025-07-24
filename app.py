@@ -668,7 +668,7 @@ def gerar_relatorio_analitico():
         codrodada = dados_requisicao.get("codrodada")
         emaillider_req = dados_requisicao.get("emaillider") # Ajustado para minúsculo para usar na API e DB
 
-        if not all([empresa, codrodada, emailLider]):
+        if not all([empresa, codrodada, emaillider]):
             return jsonify({"erro": "Campos obrigatórios ausentes."}), 400
 
         # --- BUSCAR RELATÓRIO CONSOLIDADO DO SUPABASE ---
