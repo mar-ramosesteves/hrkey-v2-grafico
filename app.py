@@ -183,7 +183,47 @@ def extrair_valor(matriz_df, cod, nota, arquetipos_list):
                 "afirmacao": linha['AFIRMACAO'].values[0]
             }
     return None
+# --- NOVA FUNÇÃO PARA SALVAR RELATÓRIO ANALÍTICO NO SUPABASE ---
+# Cole esta função no seu app.py, em um local adequado para funções auxiliares.
+def salvar_relatorio_analitico_no_supabase(dados_relatorio_json, empresa, codrodada, emaillider_val, tipo_relatorio_str):
+    """
+    Salva os dados gerados de um relatório ou gráfico no Supabase na tabela relatorios_gerados.
+    Utiliza 'emaillider' e 'data_criacao' para consistência com o DB.
+    """
+    if not SUPABASE_REST_URL or not SUPABASE_KEY:
+        print("❌ Não foi possível salvar no Supabase: Variáveis de ambiente não configuradas.")
+        return False
 
+    url = f"{SUPABASE_REST_URL}/relatorios_gerados" # Nome da tabela confirmada no Supabase
+
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}" # Use a chave de serviço para escrita se for o caso
+    }
+
+    payload = {
+        "empresa": empresa,
+        "codrodada": codrodada,
+        "emaillider": emaillider_val, # Coluna no Supabase é 'emaillider' (minúsculo)
+        "tipo_relatorio": tipo_relatorio_str,
+        "dados_json": dados_relatorio_json, # O JSON completo do relatório/gráfico
+        "data_criacao": datetime.now().isoformat(), # Nome da coluna ajustado para data_criacao
+        # expiracao_cache pode ser omitido ou definido aqui se houver uma política
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status() # Lança um erro para status de resposta HTTP ruins (4xx ou 5xx)
+        print(f"✅ JSON do '{tipo_relatorio_str}' salvo no Supabase com sucesso.")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Erro ao salvar JSON do '{tipo_relatorio_str}' no Supabase: {e}")
+        if hasattr(response, 'status_code') and hasattr(response, 'text'):
+            print(f"Detalhes da resposta do Supabase: Status {response.status_code} - {response.text}")
+        else:
+            print("Não foi possível obter detalhes da resposta do Supabase.")
+        return False
 def salvar_relatorio_analitico_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo):
     """
     Salva os dados gerados do relatório analítico no Supabase.
