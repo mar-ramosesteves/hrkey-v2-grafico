@@ -951,7 +951,7 @@ def salvar_relatorio_analitico_no_supabase(dados_ia, empresa, codrodada, emailli
 
     # Ajuste o nome da tabela no Supabase se for diferente.
     # Esta tabela deve ser para os dados do relatório analítico por questão.
-    url = f"{SUPABASE_REST_URL}/relatorios_analiticos_hrkey" # Sugestão de nome de tabela
+    url = f"{SUPABASE_REST_URL}/relatorios_gerados" # CORREÇÃO: Nome da tabela é 'relatorios_gerados'
     headers = {
         "Content-Type": "application/json",
         "apikey": SUPABASE_KEY,
