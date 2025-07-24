@@ -800,7 +800,7 @@ def gerar_relatorio_analitico():
             "titulo": "RELATÓRIO ANALÍTICO ARQUÉTIPOS - POR QUESTÃO",
             "empresa": empresa,
             "codrodada": codrodada,
-            "emailLider": emailLider,
+            "emaillider": emaillider_req, # CORREÇÃO: Usando a variável correta 'emaillider_req'
             "n_avaliacoes": len(respostas_equipes), # Número de avaliações da equipe
             "analitico": []
         }
