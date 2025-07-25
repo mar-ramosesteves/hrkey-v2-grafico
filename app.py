@@ -470,8 +470,8 @@ def gerar_graficos_comparativos():
         dados = request.get_json()
         empresa = dados.get("empresa")
         codrodada = dados.get("codrodada")
-        emailLider = dados.get("emailLider")
-        print("📥 Dados recebidos:", empresa, codrodada, emailLider)
+        emaillider_req = dados.get("emailLider")
+        print("📥 Dados recebidos:", empresa, codrodada, emaillider_req)
 
        
 
@@ -481,7 +481,7 @@ def gerar_graficos_comparativos():
             "Content-Type": "application/json"
         }
 
-        filtro = f"?empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emailLider}&select=dados_json"
+        filtro = f"?empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emaillider_req}&select=dados_json" # <-- ALTERADO AQUI
         url = f"{SUPABASE_REST_URL}/consolidado_arquetipos{filtro}"
         print("🔎 Buscando consolidado no Supabase:", url)
 
@@ -496,7 +496,7 @@ def gerar_graficos_comparativos():
         print("📄 Consolidado encontrado. Chaves:", list(json_data.keys()))
 
         percentuais_auto_result, percentuais_equipe_result, num_avaliacoes_result, dados_gerais_grafico = \
-            gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
+            gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emaillider_req) # <-- ALTERADO AQUI
 
         # AS VARIÁVEIS A SEGUIR JÁ EXISTEM NO SEU CÓDIGO E TÊM OS VALORES CORRETOS:
         # - 'pct_auto' (seus Percentuais AUTO calculados)
@@ -522,7 +522,7 @@ def gerar_graficos_comparativos():
         return jsonify({"erro": str(e)}), 500
 
 
-def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider):
+def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emaillider_req): # <-- ALTERADO AQUI
     import numpy as np
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
@@ -556,7 +556,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     # serão usados no JSON final.
     dados_gerais_grafico = {
         "titulo": "ARQUÉTIPOS DE GESTÃO",
-        "subtitulo": f"{emailLider} | {codrodada} | {empresa}",
+        "subtitulo": f"{emaillider_req} | {codrodada} | {empresa}", # <-- ALTERADO AQUI
         "info_avaliacoes": f"Equipe: {len(respostas_equipes)} respondentes"
     }
     return pct_auto, pct_equipes, len(respostas_equipes), dados_gerais_grafico
@@ -580,7 +580,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
     ax.axhline(60, color='gray', linestyle='--', label="Dominante (60%)")
     ax.axhline(50, color='gray', linestyle=':', label="Suporte (50%)")
     ax.set_ylabel("Pontuação (%)")
-    ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emailLider} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12)
+    ax.set_title(f"ARQUÉTIPOS DE GESTÃO\n{emaillider_req} | {codrodada} | {empresa}\nEquipe: {len(respostas_equipes)} respondentes", fontsize=12) # <-- ALTERADO AQUI
     ax.legend()
     plt.tight_layout()
 
@@ -600,26 +600,19 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emailLider)
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json"
     }
-    nome_arquivo = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emailLider}_{codrodada}.pdf"
+    nome_arquivo_json = f"ARQUETIPOS_AUTO_VS_EQUIPE_{emaillider_req}_{codrodada}.json" # Alterado para .json e usando emaillider_req
 
     dados_ia = {
         "titulo": "ARQUÉTIPOS AUTOAVALIAÇÃO vs EQUIPE",
-        "subtitulo": f"{empresa} / {emailLider} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}",
+        "subtitulo": f"{empresa} / {emaillider_req} / {codrodada} / {datetime.now().strftime('%d/%m/%Y')}", # Usando emaillider_req
         "n_avaliacoes": len(respostas_equipes),
-        "autoavaliacao": pct_auto,
-        "mediaEquipe": pct_equipes
+        "autoavaliacao": percentuais_auto_result,  # Use percentuais_auto_result aqui
+        "mediaEquipe": percentuais_equipe_result    # Use percentuais_equipe_result aqui
     }
 
-    payload = {
-        "empresa": empresa,
-        "codrodada": codrodada,
-        "emaillider": emailLider,
-        "data_criacao": datetime.utcnow().isoformat(),
-        "dados_json": dados_ia,
-        "nome_arquivo": nome_arquivo,
-        "arquivo_pdf_base64": pdf_base64
-    }
-
+    # O payload será simplificado e enviado para salvar_relatorio_analitico_no_supabase
+    # Não precisamos mais montar o payload aqui, pois a função de salvamento faz isso.
+    # Apenas o `dados_ia` e os parâmetros de identificação serão passados.
     
     
     
@@ -650,14 +643,6 @@ def ver_arquetipos():
 
 from textwrap import wrap
 
-def inserir_rodape(c, width, empresa, emailLider, codrodada):
-    if c.getPageNumber() > 1:
-        c.setFont("Helvetica", 8)
-        rodape_y = 1.5 * cm
-        info1 = f"Empresa: {empresa} | Líder: {emailLider} | Rodada: {codrodada}"
-        info2 = datetime.now().strftime("%d/%m/%Y %H:%M")
-        c.drawString(2 * cm, rodape_y, f"{info1} | {info2}")
-        c.drawRightString(width - 2 * cm, rodape_y, f"Página {c.getPageNumber() - 1}")
 
 
 @app.route("/gerar-relatorio-analitico", methods=["POST"])
