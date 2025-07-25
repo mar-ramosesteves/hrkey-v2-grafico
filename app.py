@@ -473,7 +473,52 @@ def gerar_graficos_comparativos():
         emaillider_req = dados.get("emailLider")
         print("📥 Dados recebidos:", empresa, codrodada, emaillider_req)
 
-       
+       # --- Lógica de Caching: Buscar JSON do Gráfico Salvo ---
+        # Definir um identificador único para este gráfico
+        # Usaremos 'arquetipos_grafico_comparativo'
+        tipo_relatorio_grafico_atual = "arquetipos_grafico_comparativo" 
+
+        if not SUPABASE_REST_URL or not SUPABASE_KEY:
+            return jsonify({"erro": "Configuração do Supabase ausente no servidor."}), 500
+
+        url_busca_cache = f"{SUPABASE_REST_URL}/relatorios_gerados"
+
+        params_cache = {
+            "empresa": f"eq.{empresa}",
+            "codrodada": f"eq.{codrodada}",
+            "emaillider": f"eq.{emaillider_req}", # Variável emaillider_req
+            "tipo_relatorio": f"eq.{tipo_relatorio_grafico_atual}",
+            "order": "data_criacao.desc",
+            "limit": 1
+        }
+
+        print(f"DEBUG: Buscando cache do gráfico '{tipo_relatorio_grafico_atual}' no Supabase...")
+        cache_response = requests.get(url_busca_cache, headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}"
+        }, params=params_cache, timeout=15)
+        cache_response.raise_for_status()
+        cached_data_list = cache_response.json()
+
+        if cached_data_list:
+            cached_report = cached_data_list[0]
+            data_criacao_cache_str = cached_report.get("data_criacao")
+            
+            if data_criacao_cache_str:
+                data_criacao_cache = datetime.fromisoformat(data_criacao_cache_str.replace('Z', '+00:00')) 
+                cache_validity_period = timedelta(hours=1) # Cache válido por 1 hora
+
+                if datetime.now(data_criacao_cache.tzinfo) - data_criacao_cache < cache_validity_period:
+                    print(f"✅ Cache válido encontrado para o gráfico '{tipo_relatorio_grafico_atual}'. Retornando dados cacheados.")
+                    return jsonify(cached_report.get("dados_json", {})), 200
+                else:
+                    print(f"Cache do gráfico '{tipo_relatorio_grafico_atual}' expirado. Recalculando...")
+            else:
+                print("Cache encontrado, mas sem data de criação válida. Recalculando...")
+        else:
+            print(f"Cache do gráfico '{tipo_relatorio_grafico_atual}' não encontrado. Recalculando...")
+
+        # --- SEU CÓDIGO DA ROTA ORIGINAL CONTINUA A PARTIR DAQUI SE O CACHE NÃO FOR ENCONTRADO OU ESTIVER EXPIRADO ---
 
         headers = {
             "apikey": SUPABASE_KEY,
@@ -513,9 +558,14 @@ def gerar_graficos_comparativos():
             "mediaEquipe": percentuais_equipe_result,    # Seus percentuais da média da equipe
             "n_avaliacoes": num_avaliacoes_result        # A contagem de avaliações
         }
-    
+
+        # --- Chamar a função para salvar os dados do gráfico gerados no Supabase ---
+        # Salvamos o JSON completo que será enviado ao frontend
+        salvar_relatorio_analitico_no_supabase(json_para_frontend, empresa, codrodada, emaillider_req, tipo_relatorio_grafico_atual)
+
         # Retornando o JSON completo para o navegador
         return jsonify(json_para_frontend), 200
+        
 
     except Exception as e:
         print("💥 Erro geral na geração do gráfico:", str(e))
