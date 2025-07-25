@@ -865,62 +865,10 @@ def gerar_relatorio_analitico():
         return jsonify({"erro": error_message, "traceback": detailed_traceback}), 500
 
 
-def salvar_json_ia_no_drive(dados, nome_base, service, id_lider):
-    try:
-        from io import BytesIO
-        import json
-        from googleapiclient.http import MediaIoBaseUpload
-
-        # Verifica (ou cria) subpasta ia_json
-        def buscar_id(nome, pai):
-            q = f"'{pai}' in parents and name='{nome}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-            resp = service.files().list(q=q, fields="files(id)").execute().get("files", [])
-            return resp[0]["id"] if resp else None
-
-        id_pasta_ia = buscar_id("ia_json", id_lider)
-        if not id_pasta_ia:
-            pasta = service.files().create(
-                body={"name": "ia_json", "mimeType": "application/vnd.google-apps.folder", "parents": [id_lider]},
-                fields="id"
-            ).execute()
-            id_pasta_ia = pasta["id"]
-
-        nome_arquivo = f"IA_{nome_base}.json"
-        conteudo_bytes = BytesIO(json.dumps(dados, indent=2, ensure_ascii=False).encode("utf-8"))
-        media = MediaIoBaseUpload(conteudo_bytes, mimetype="application/json")
-
-        file_metadata = {"name": nome_arquivo, "parents": [id_pasta_ia]}
-        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-
-        print(f"✅ JSON IA salvo no Drive: {nome_arquivo}")
-    except Exception as e:
-        print(f"❌ Erro ao salvar JSON IA: {str(e)}")
 
 
 
 
-def salvar_json_ia_no_supabase(dados_ia, empresa, codrodada, emailLider, nome_arquivo):
-    url = f"{SUPABASE_REST_URL}/consolidado_arquetipos"
-    headers = {
-        "Content-Type": "application/json",
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}"
-    }
-
-    payload = {
-        "empresa": empresa,
-        "codrodada": codrodada,
-        "emaillider": emailLider,
-        "dados_json": dados_ia,
-        "nome_arquivo": nome_arquivo,
-        "data_criacao": datetime.now().isoformat()
-    }
-
-    response = requests.post(url, headers=headers, json=payload, timeout=30)
-    if not response.ok:
-        print("❌ Erro ao salvar no Supabase:", response.status_code, response.text)
-    else:
-        print("✅ JSON do gráfico salvo no Supabase com sucesso.")
 
 
 # --- NOVA FUNÇÃO PARA SALVAR O RELATÓRIO ANALÍTICO NO SUPABASE ---
