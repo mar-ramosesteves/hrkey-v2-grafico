@@ -866,9 +866,18 @@ def gerar_relatorio_analitico():
 
                 info_eq = None
                 if qtd_avaliacoes > 0:
-                    media = round(somatorio / qtd_avaliacoes)
-                    info_eq = extrair_valor(matriz_df, cod, media, arquetipos_list_for_extrair_valor)
+                    media_real = somatorio / qtd_avaliacoes
+                    percentual_eq = round((media_real / 6) * 100, 2)
+                    media_arredondada = round(media_real)
+                    info_eq_base = extrair_valor(matriz_df, cod, media_arredondada, arquetipos_list_for_extrair_valor)
+                    if info_eq_base:
+                        info_eq = {
+                            "tendencia": info_eq_base["tendencia"],
+                            "percentual": percentual_eq,
+                            "afirmacao": info_eq_base["afirmacao"]
+                        }
 
+                
                 # Incluir a questão apenas se houver dados de autoavaliação ou equipe
                 if info_auto or info_eq:
                     dados_gerados["analitico"].append({
