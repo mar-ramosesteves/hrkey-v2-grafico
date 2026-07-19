@@ -413,11 +413,17 @@ def gerar_graficos_comparativos():
             "Content-Type": "application/json"
         }
 
-        filtro = f"?empresa=eq.{empresa}&codrodada=eq.{codrodada}&emaillider=eq.{emaillider_req}&select=dados_json"
-        url = f"{SUPABASE_REST_URL}/consolidado_arquetipos{filtro}"
-        print("🔎 Buscando consolidado no Supabase:", url)
+        url = f"{SUPABASE_REST_URL}/consolidado_arquetipos"
+        params_consolidado = {
+            "select": "dados_json",
+            "empresa": f"eq.{empresa}",
+            "codrodada": f"eq.{codrodada}",
+            "emaillider": f"eq.{emaillider_req}",
+            "limit": "1"
+        }
+        print("🔎 Buscando consolidado no Supabase:", url, params_consolidado)
 
-        resp = requests.get(url, headers=headers)
+        resp = requests.get(url, headers=headers, params=params_consolidado, timeout=30)
         registros = resp.json()
 
         if not registros or "dados_json" not in registros[0]:
