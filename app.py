@@ -21,7 +21,11 @@ import pandas as pd
 import os
 import traceback
 
+from leadertrack_admission import admission_enabled
+from leadertrack_admission_source import get_eligible_consolidated, attach_admission_sample, register_admission_metadata
+
 app = Flask(__name__)
+register_admission_metadata(app)
 CORS(app, resources={r"/*": {"origins": ["https://gestor.thehrkey.tech"]}}, supports_credentials=True)
 
 @app.after_request
@@ -175,7 +179,7 @@ def salvar_relatorio_analitico_no_supabase(dados_relatorio_json, empresa, codrod
         "codrodada": codrodada,
         "emaillider": emaillider_val,
         "tipo_relatorio": tipo_relatorio_str,
-        "dados_json": dados_relatorio_json,
+        "dados_json": attach_admission_sample(dados_relatorio_json),
         "data_criacao": datetime.now().isoformat()
     }
 
@@ -397,7 +401,7 @@ def gerar_graficos_comparativos():
         cache_response.raise_for_status()
         cached_data_list = cache_response.json()
 
-        if cached_data_list:
+        if cached_data_list and not admission_enabled(codrodada):
             cached_report = cached_data_list[0]
             data_criacao_cache_str = cached_report.get("data_criacao")
             if data_criacao_cache_str:
@@ -423,7 +427,7 @@ def gerar_graficos_comparativos():
         }
         print("🔎 Buscando consolidado no Supabase:", url, params_consolidado)
 
-        resp = requests.get(url, headers=headers, params=params_consolidado, timeout=30)
+        resp = get_eligible_consolidated(url, headers=headers, params=params_consolidado, timeout=30)
         registros = resp.json()
 
         if not registros or "dados_json" not in registros[0]:
@@ -514,7 +518,7 @@ def gerar_relatorio_analitico():
         cache_response.raise_for_status()
         cached_data_list = cache_response.json()
 
-        if cached_data_list:
+        if cached_data_list and not admission_enabled(codrodada):
             cached_report = cached_data_list[0]
             data_criacao_cache_str = cached_report.get("data_criacao")
             if data_criacao_cache_str:
@@ -538,7 +542,7 @@ def gerar_relatorio_analitico():
             "emaillider": f"eq.{emaillider_req}"
         }
 
-        supabase_response = requests.get(supabase_url_consolidado, headers=supabase_headers, params=params_consolidado, timeout=30)
+        supabase_response = get_eligible_consolidated(supabase_url_consolidado, headers=supabase_headers, params=params_consolidado, timeout=30)
         supabase_response.raise_for_status()
         consolidated_data_list = supabase_response.json()
 
@@ -667,3 +671,4 @@ def gerar_relatorio_analitico():
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000))
+
