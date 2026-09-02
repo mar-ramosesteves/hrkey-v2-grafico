@@ -19,6 +19,10 @@ def admission_enabled(round_code):
 
 def fetch_admission_rows(rest_url, headers, company, round_code, leader, get=None):
     get = get or requests.get
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not service_key:
+        raise ValueError("Consulta de admissao requer credencial de servidor configurada.")
+    headers = {**headers, "apikey": service_key, "Authorization": f"Bearer {service_key}"}
     rows = []
     for offset in range(0, 10000, 1000):
         response = get(f"{rest_url}/v_leadertrack_respostas_classificadas", headers=headers, params={
