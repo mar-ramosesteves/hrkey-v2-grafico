@@ -17,20 +17,19 @@ def admission_enabled(round_code):
     return str(round_code or "").strip().lower() in rounds
 
 
-def fetch_admission_rows(rest_url, headers, company, round_code, leader, get=None):
-    get = get or requests.get
-    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-    if not service_key:
-        raise ValueError("Consulta de admissao requer credencial de servidor configurada.")
-    headers = {**headers, "apikey": service_key, "Authorization": f"Bearer {service_key}"}
+def query_admission_rows(rest_url, headers, round_code, leader, get):
     rows = []
     for offset in range(0, 10000, 1000):
-        response = get(f"{rest_url}/v_leadertrack_respostas_classificadas", headers=headers, params={
-            "select": "modulo,resposta_id,email_respondente,email_lider_avaliado,tipo_relacao_lider,holding,admission_date,data_criacao,dados_json",
-            "empresa": f"eq.{str(company).lower()}", "codrodada": f"ilike.{str(round_code).lower()}",
-            "email_lider_avaliado": f"eq.{str(leader).lower()}", "order": "modulo,resposta_id",
-            "limit": 1000, "offset": offset,
-        }, timeout=30)
+        # Individual feedback is scoped by leader and round; company is only a UI/context filter.
+        params = {
+            "select": "modulo,resposta_id,email_respondente,email_lider_avaliado,tipo_relacao_lider,holding,empresa,admission_date,data_criacao,dados_json",
+            "codrodada": f"ilike.{str(round_code).lower()}",
+            "email_lider_avaliado": f"eq.{str(leader).lower()}",
+            "order": "modulo,resposta_id",
+            "limit": 1000,
+            "offset": offset,
+        }
+        response = get(f"{rest_url}/v_leadertrack_respostas_classificadas", headers=headers, params=params, timeout=30)
         response.raise_for_status()
         page = response.json()
         if not isinstance(page, list):
@@ -40,11 +39,22 @@ def fetch_admission_rows(rest_url, headers, company, round_code, leader, get=Non
             break
     else:
         raise ValueError("Amostra excedeu o limite de leitura; nenhum calculo parcial foi utilizado.")
+    return rows
+
+
+def fetch_admission_rows(rest_url, headers, company, round_code, leader, get=None):
+    get = get or requests.get
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not service_key:
+        raise ValueError("Consulta de admissao requer credencial de servidor configurada.")
+    headers = {**headers, "apikey": service_key, "Authorization": f"Bearer {service_key}"}
+    company_norm = str(company or "").strip().lower()
+    rows = query_admission_rows(rest_url, headers, round_code, leader, get)
+    for row in rows:
+        row["_leadertrack_scope_company"] = company_norm
+        row["_leadertrack_leader_wide_sample"] = True
     if not rows:
         raise ValueError("Respostas originais indisponiveis; nao foi usado grafico antigo.")
-    if any(str(r.get("holding") or "").strip().upper() != "LEVEN"
-           for r in rows if r.get("tipo_relacao_lider") != "AUTOAVALIACAO"):
-        raise ValueError("Cadastro/contexto incompleto na amostra; revisar antes de calcular.")
     return rows
 
 
@@ -110,7 +120,10 @@ def select_sample(rows, module):
         "respostas_utilizadas": len(eligible) if len(eligible) >= MINIMUM_RESPONDENTS else 0,
         "insuficiente": len(eligible) < MINIMUM_RESPONDENTS,
         "autoavaliacoes": len(self_rows),
-        "escopo_amostra": "Avaliacoes ao lider na empresa selecionada (direta e funcional).",
+        "escopo_amostra": (
+            "Avaliacoes ao lider na rodada, independentemente da unidade do respondente. "
+            "Recortes por empresa/unidade sao detalhamentos sujeitos ao corte minimo."
+        ),
     }
     return eligible, self_rows, meta
 
