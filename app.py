@@ -463,6 +463,7 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emaillider_
     respostas_equipes = [
         avaliacao.get("respostas", {}) for avaliacao in json_data.get("avaliacoesEquipe", [])
     ]
+    amostra = json_data.get("amostra") or {}
 
     print("📄 Chaves em respostas_auto:", respostas_auto.keys())
     print("📄 Q01 =", respostas_auto.get("Q01", "vazio"))
@@ -472,10 +473,25 @@ def gerar_grafico_completo_com_titulo(json_data, empresa, codrodada, emaillider_
     pct_auto = calcular_percentuais(respostas_auto)
     pct_equipes = calcular_percentuais_equipes(respostas_equipes)
 
+    respostas_utilizadas = amostra.get("respostas_utilizadas", len(respostas_equipes))
+    respostas_recebidas = amostra.get("respostas_equipe")
+    elegiveis_media = amostra.get("elegiveis_media")
+    menos_de_3_meses = amostra.get("menos_de_3_meses")
+    pendentes_admissao = amostra.get("pendentes_admissao")
+    info_partes = [f"Arquétipos: {respostas_utilizadas} respostas utilizadas"]
+    if respostas_recebidas is not None:
+        info_partes.append(f"{respostas_recebidas} avaliações recebidas")
+    if elegiveis_media is not None:
+        info_partes.append(f"{elegiveis_media} elegíveis para média")
+    if menos_de_3_meses:
+        info_partes.append(f"{menos_de_3_meses} com menos de 3 meses")
+    if pendentes_admissao:
+        info_partes.append(f"{pendentes_admissao} pendentes de admissão")
+
     dados_gerais_grafico = {
         "titulo": "ARQUÉTIPOS DE GESTÃO",
         "subtitulo": f"{emaillider_req} | {codrodada} | {empresa}",
-        "info_avaliacoes": f"Equipe: {len(respostas_equipes)} respondentes"
+        "info_avaliacoes": " | ".join(info_partes)
     }
     return pct_auto, pct_equipes, len(respostas_equipes), dados_gerais_grafico
 
